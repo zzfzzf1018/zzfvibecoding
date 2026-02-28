@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Plan Quality Analytics</title>
+    
+    <!-- Bootstrap 5 & FontAwesome -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/table-sort.css">
+    <link rel="stylesheet" href="css/loading.css">
+</head>
+<body>
+    
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark navbar-custom mb-5">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <i class="fa-solid fa-heart-pulse me-2"></i>
+                DICOM Plan Quality Analytics
+            </a>
+            <span class="navbar-text text-white-50">v1.0.0</span>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        
+        <!-- Controls Panel -->
+        <div class="card mb-4 shadow-sm animate-entry">
+            <div class="card-header border-0 pb-0" data-bs-toggle="collapse" data-bs-target="#configPanel" style="cursor: pointer;">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="fa-solid fa-sliders me-2"></i>
+                    <span class="h5 mb-0">Analysis Configuration</span>
+                    <i class="fa-solid fa-chevron-down ms-auto text-muted small"></i>
+                </div>
+            </div>
+            <div id="configPanel" class="collapse show">
+                <div class="card-body">
+                <div class="row align-items-end g-4">
+                    <!-- Data Source Config -->
+                    <div class="col-lg-3">
+                        <label class="form-label mb-2">DataSet</label>
+                        <input type="file" id="dicomFolder" style="display: none;" webkitdirectory directory multiple>
+                        
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-custom-folder w-100 py-2" type="button" id="btnBrowseFolder">
+                                <i class="fa-regular fa-folder-open me-2"></i> Browse Local Folder
+                            </button>
+                        </div>
+                        <div class="mt-2 small text-secondary d-flex align-items-center">
+                            <span id="folderStatus" class="badge bg-light text-dark border"><i class="fa-solid fa-circle-info me-1"></i> Ready to scan</span>
+                        </div>
+                    </div>
+
+                    <!-- Scan Action -->
+                    <div class="col-lg-2">
+                         <label class="form-label mb-2">Discovery</label>
+                         <button id="scanBtn" class="btn btn-scan w-100">
+                            <i class="fa-solid fa-magnifying-glass me-2"></i> Scan Files
+                         </button>
+                    </div>
+
+                    <!-- Prescription Config -->
+                    <div class="col-lg-2">
+                        <label for="prescribedDose" class="form-label mb-2">Prescription (Gy)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-bullseye text-primary"></i></span>
+                            <input type="number" id="prescribedDose" class="form-control fw-bold text-center" value="60">
+                        </div>
+                    </div>
+
+                     <!-- Actions -->
+                    <div class="col-lg-5 text-end">
+                        <label class="form-label d-none d-lg-block">&nbsp;</label>
+                        <div class="d-flex gap-2 justify-content-end">
+                             <button id="demoBtn" class="btn btn-light border text-secondary text-nowrap">
+                                <i class="fa-solid fa-vial me-1"></i> Demo
+                            </button>
+                            <button id="calcBtn" class="btn btn-analyze px-3 text-nowrap">
+                                <i class="fa-solid fa-rocket me-2"></i> Run Analysis
+                            </button>
+                            <button id="evaluateBtn" class="btn btn-primary px-3 text-nowrap" disabled>
+                                <i class="fa-solid fa-clipboard-check me-2"></i> Evaluate Criteria
+                            </button>
+                            <button id="saveRequestBtn" class="btn btn-secondary px-3 text-nowrap" disabled>
+                                <i class="fa-solid fa-download me-2"></i> Save Request
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- Main Layout: Vertical Splits -->
+        <div class="row g-4 pb-5" id="reportLayout">
+            <!-- Detailed Metrics Table (Top/Left) -->
+            <div class="col-12 animate-entry animate-delay-1">
+                <div class="card card-hoverable">
+                    <div class="card-header d-flex align-items-center" style="cursor: move;">
+                        <i class="fa-solid fa-grip-vertical me-3 text-muted opacity-50"></i>
+                        
+                        <div class="d-flex align-items-center flex-grow-1" data-bs-toggle="collapse" data-bs-target="#metricsPanel" style="cursor: pointer;">
+                            <i class="fa-solid fa-table-list me-2"></i>
+                            <span class="h6 mb-0">Quantitative Metrics</span>
+                        </div>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            <div class="input-group input-group-sm me-3 shadow-sm" style="width: 320px;" onclick="event.stopPropagation();">
+                                <span class="input-group-text bg-white border-end-0 rounded-start-pill ps-3 text-muted"><i class="fa-solid fa-filter"></i></span>
+                                <input type="text" id="roiSearchInput" class="form-control border-start-0 rounded-end-pill" placeholder="Filter ROIs..." style="box-shadow: none;">
+                            </div>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill">
+                                <i class="fa-solid fa-check me-1"></i> QA Mode
+                            </span>
+                            <i class="fa-solid fa-chevron-down text-muted small ms-2" data-bs-toggle="collapse" data-bs-target="#metricsPanel" style="cursor: pointer;"></i>
+                        </div>
+                    </div>
+                    <!-- Wrap table in a fixed height container for sticky header -->
+                    <div id="metricsPanel" class="collapse show">
+                        <div class="table-container">
+                        <table class="table table-hover align-middle mb-0 text-nowrap" id="metricsTable">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4 cursor-pointer" onclick="sortTable(0, 'text')">ROI Name <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(1, 'number')">Mean <small class="fw-normal opacity-75">(Gy)</small> <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(2, 'number')">Max <small class="fw-normal opacity-75">(Gy)</small> <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(3, 'number')">Min <small class="fw-normal opacity-75">(Gy)</small> <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(4, 'number')">Vol <small class="fw-normal opacity-75">(cm³)</small> <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(5, 'number')">HI <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                    <th class="cursor-pointer" onclick="sortTable(6, 'number')">CI <i class="fa-solid fa-sort text-muted small ms-1"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricsTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-5">
+                                        <div class="py-4">
+                                            <i class="fa-solid fa-chart-simple display-6 d-block opacity-25 mb-3"></i>
+                                            Waiting for analysis results...
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <!-- Chart Area (Bottom) -->
+            <div class="col-12 mb-5">
+                <div class="card shadow-sm">
+                    <div class="card-header py-3 bg-white d-flex align-items-center" style="cursor: move;">
+                        <i class="fa-solid fa-grip-vertical me-3 text-muted opacity-50"></i>
+                        <div class="d-flex align-items-center flex-grow-1" data-bs-toggle="collapse" data-bs-target="#dvhPanel" style="cursor: pointer;">
+                            <i class="fa-solid fa-chart-line me-2 text-success"></i>
+                            <span class="fw-bold flex-grow-1">Cumulative Dose Volume Histogram (DVH)</span>
+                            <i class="fa-solid fa-chevron-down text-muted small"></i>
+                        </div>
+                    </div>
+                    <div id="dvhPanel" class="collapse show">
+                        <div class="card-body" style="height: 600px;">
+                            <canvas id="dvhChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="text-center text-secondary py-4 mt-5 small border-top">
+             &copy; 2026 Plan Quality Analytics Tool. Powered by DCMJS & Chart.js
+        </footer>
+    </div>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/dcmjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    
+    <!-- App Script -->
+    <script src="js/script.js"></script>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay d-none">
+        <div class="text-center">
+            <div class="loading-spinner mb-3 mx-auto"></div>
+            <div id="loadingText" class="loading-text">Processing...</div>
+        </div>
+    </div>
+</body>
+</html>

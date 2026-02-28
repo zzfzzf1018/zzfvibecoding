@@ -1,0 +1,248 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+    /* Modern Palette - Professional Medical/Scientific Look */
+    --primary: #2563eb;       
+    --primary-gradient: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    --secondary: #64748b;     
+    --success: #10b981;       
+    --info: #0ea5e9;          
+    --background: #f1f5f9;    
+    --surface: #ffffff;
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-hover: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    
+    --radius-lg: 16px;
+    --radius-md: 10px;
+}
+
+body {
+    background-color: var(--background);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 40px;
+}
+
+/* --- Navbar --- */
+.navbar-custom {
+    background: radial-gradient(circle at top right, #334155, #0f172a);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    padding: 1rem 0;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    font-size: 1.35rem;
+}
+
+/* --- Cards --- */
+.card {
+    background: var(--surface);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: visible; 
+}
+
+.card-hoverable:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+    border-color: rgba(37, 99, 235, 0.2);
+}
+
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 1.25rem 1.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #334155;
+}
+
+.card-header i {
+    color: var(--primary);
+    background-color: #eff6ff;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 1rem;
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+}
+
+/* --- Controls & Inputs --- */
+.form-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.form-control, .form-select, .input-group-text {
+    border-radius: var(--radius-md);
+    border-color: #e2e8f0;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.form-control:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+/* --- Buttons --- */
+.btn {
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0.6rem 1.25rem;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.6s;
+}
+.btn:hover::after {
+    transform: translateX(100%);
+}
+
+.btn-custom-folder {
+    background: #fff;
+    border: 2px dashed #cbd5e1;
+    color: #64748b;
+}
+
+.btn-custom-folder:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: #f8fafc;
+    transform: translateY(-2px);
+}
+
+.btn-scan {
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
+    border: none;
+}
+.btn-scan:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
+    color: white;
+}
+
+.btn-analyze {
+    background: #10b981;
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4);
+    border: none;
+}
+.btn-analyze:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.5);
+    color: white;
+}
+
+/* --- Table (Scientific Grid) --- */
+.table-container {
+    max-height: 450px;
+    overflow-y: auto;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: #fff;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.table-container::-webkit-scrollbar {
+    width: 8px;
+}
+.table-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.table-container::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+    border: 2px solid #f1f5f9;
+}
+
+.table {
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table thead th {
+    background: #f8fafc; 
+    color: #475569;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem 1.25rem;
+    border-bottom: 2px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 1rem 1.25rem;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+}
+
+.table tbody tr {
+    transition: background-color 0.1s;
+}
+
+.table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+.badge {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-weight: 600;
+}
+
+/* --- Chart Area --- */
+#dvhChart {
+    padding: 1rem;
+    min-height: 400px;
+}
+
+/* --- Animation --- */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-entry {
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.animate-delay-1 { animation-delay: 0.1s; }
+.animate-delay-2 { animation-delay: 0.2s; }

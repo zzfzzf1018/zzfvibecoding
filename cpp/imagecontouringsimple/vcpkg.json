@@ -1,0 +1,10 @@
+{
+  "name": "ct-contouring-tool",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "itk",
+    "vtk",
+    "imgui",
+    "nativefiledialog-extended"
+  ]
+}

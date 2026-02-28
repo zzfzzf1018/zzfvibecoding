@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run CTContouringTool",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/build/x64-debug-vcpkg/CTContouringTool.exe",
+            "args": [
+                "${workspaceFolder}/dicom_data" 
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/out/build/x64-debug-vcpkg",
+            "environment": [],
+            "console": "externalTerminal"
+        }
+    ]
+}

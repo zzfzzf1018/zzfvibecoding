@@ -1,0 +1,35 @@
+{
+  "name": "dicom_dvh_project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "bin": {
+    "dicom-dvh-tool": "server.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "pkg . --targets node18-win-x64 --output dist/dicom-dvh-tool.exe && echo F | xcopy /y config.json dist\\config.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dcmjs": "^0.48.0",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
+    "multer": "^2.0.2"
+  },
+  "pkg": {
+    "assets": [
+      "css/**/*",
+      "js/**/*",
+      "index.html",
+      "config.json"
+    ]
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}
