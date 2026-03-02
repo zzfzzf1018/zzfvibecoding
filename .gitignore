@@ -39,3 +39,20 @@
 
 # debug information files
 *.dwo
+csharp/grpc/GrpcServer/obj/
+csharp/grpc/GrpcServer/bin/Debug/
+csharp/grpc/GrpcClient/obj/Debug/
+csharp/grpc/GrpcClient/bin/
+csharp/grpc/GrpcClient/obj/
+csharp/grpc/.vs/GrpcSample/CopilotIndices/17.14.1204.46620/CodeChunks.db
+csharp/grpc/.vs/GrpcSample/CopilotIndices/17.14.1204.46620/SemanticSymbols.db
+csharp/grpc/.vs/GrpcSample/DesignTimeBuild/.dtbcache.v2
+csharp/grpc/.vs/GrpcSample/FileContentIndex/4baf84b2-dddb-401e-8acd-7664b0f70466.vsidx
+csharp/grpc/.vs/GrpcSample/FileContentIndex/5845610f-b15d-4a64-92fb-6cdac955c776.vsidx
+csharp/grpc/.vs/GrpcSample/v17/.futdcache.v2
+csharp/grpc/.vs/GrpcSample/v17/.suo
+csharp/grpc/.vs/GrpcSample/v17/DocumentLayout.backup.json
+csharp/grpc/.vs/GrpcSample/v17/DocumentLayout.json
+csharp/grpc/.vs/ProjectEvaluation/grpcsample.metadata.v9.bin
+csharp/grpc/.vs/ProjectEvaluation/grpcsample.projects.v9.bin
+csharp/grpc/.vs/ProjectEvaluation/grpcsample.strings.v9.bin
