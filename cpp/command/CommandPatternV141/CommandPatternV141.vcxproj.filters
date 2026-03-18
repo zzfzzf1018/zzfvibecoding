@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4B04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Header Files\UI">
+      <UniqueIdentifier>{5316A01A-8A15-4A64-B6D6-5FCD8FCBD7CD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\MGR">
+      <UniqueIdentifier>{5A306E89-D526-4FA6-9A36-A4FEA50A2DB4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ACT">
+      <UniqueIdentifier>{88E68B90-D67E-401F-8206-2F8E63B7A637}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\UI">
+      <UniqueIdentifier>{57CB4F9A-E78C-4B91-84CE-E209A06FC4B2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\MGR">
+      <UniqueIdentifier>{F003C16D-56F0-4F54-A8D2-5872DE834D89}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ACT">
+      <UniqueIdentifier>{2A7B8C0F-0712-4892-B2D9-FB6F087D189B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ui\ConsoleUI.h">
+      <Filter>Header Files\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="mgr\Command.h">
+      <Filter>Header Files\MGR</Filter>
+    </ClInclude>
+    <ClInclude Include="mgr\OrderCommands.h">
+      <Filter>Header Files\MGR</Filter>
+    </ClInclude>
+    <ClInclude Include="act\OrderActions.h">
+      <Filter>Header Files\ACT</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\ConsoleUI.cpp">
+      <Filter>Source Files\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="mgr\OrderCommands.cpp">
+      <Filter>Source Files\MGR</Filter>
+    </ClCompile>
+    <ClCompile Include="act\OrderActions.cpp">
+      <Filter>Source Files\ACT</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
