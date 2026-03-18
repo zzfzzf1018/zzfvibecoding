@@ -56,3 +56,8 @@ csharp/grpc/.vs/GrpcSample/v17/DocumentLayout.json
 csharp/grpc/.vs/ProjectEvaluation/grpcsample.metadata.v9.bin
 csharp/grpc/.vs/ProjectEvaluation/grpcsample.projects.v9.bin
 csharp/grpc/.vs/ProjectEvaluation/grpcsample.strings.v9.bin
+cpp/eventbus/packages/
+cpp/eventbus/eventbus.vcxproj.user
+cpp/eventbus/.vs/eventbus/v17/ipch/
+cpp/eventbus/obj/
+cpp/eventbus/.vs/
