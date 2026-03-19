@@ -1,0 +1,67 @@
+# Build output directories
+[Bb]in/
+[Oo]ut/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Visual Studio cache/options
+.vs/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# MSBuild and compiler intermediates
+*.obj
+*.iobj
+*.pch
+*.ipch
+*.pdb
+*.idb
+*.ilk
+*.tlog
+*.lastbuildstate
+*.recipe
+*.log
+
+# Linker and binary outputs
+*.exe
+*.dll
+*.lib
+*.exp
+*.manifest
+*.appx
+*.appxbundle
+
+# C/C++ generated files
+*.o
+*.a
+*.so
+*.dylib
+*.d
+
+# CMake artifacts (if added later)
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+
+# NuGet / package caches
+packages/
+*.nupkg
+
+# Temporary / backup files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.orig
+
+# Optional: keep one folder marker file when needed
+# !.gitkeep
