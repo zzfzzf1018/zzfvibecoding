@@ -263,6 +263,11 @@ public:
     }
 
     afx_msg void OnTimer(UINT_PTR nIDEvent) {
+        if (shuttingDown_.load()) {
+            CFrameWnd::OnTimer(nIDEvent);
+            return;
+        }
+
         if (nIDEvent == kUiRefreshTimerId) {
             UpdateStatusText();
         }
@@ -270,43 +275,73 @@ public:
     }
 
     afx_msg void OnPublishLoginClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandPublishLogin("button_click"), "button-login");
     }
 
     afx_msg void OnPolicyRejectClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandSetPolicy(eb::AsyncQueuePolicy::RejectNew, 256), "policy-reject");
     }
 
     afx_msg void OnPolicyWaitClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandSetPolicy(eb::AsyncQueuePolicy::WaitForSpace, 256), "policy-wait");
     }
 
     afx_msg void OnPolicyDropOldestClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandSetPolicy(eb::AsyncQueuePolicy::DropOldest, 256), "policy-drop-oldest");
     }
 
     afx_msg void OnBurstRawClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandRunBurst(false, 400), "burst-raw-cmd");
     }
 
     afx_msg void OnBurstCoalescedClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandRunBurst(true, 400), "burst-coalesced-cmd");
     }
 
     afx_msg void OnToggleUiExecutorClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandToggleUiExecutor(), "toggle-ui-executor");
     }
 
     afx_msg void OnResetCountersClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandResetCounters(), "reset-counters");
     }
 
     afx_msg void OnPublishSyncTickClicked() {
+        if (shuttingDown_.load()) {
+            return;
+        }
         PublishCommand(commandBus_.PublishCommandPublishSyncTick(), "sync-tick-cmd");
     }
 
     afx_msg LRESULT OnEventBusUiTask(WPARAM wParam, LPARAM lParam) {
         UNREFERENCED_PARAMETER(wParam);
+        if (shuttingDown_.load()) {
+            return 0;
+        }
         uiBus_.HandleUiTaskMessage(lParam);
         return 0;
     }
@@ -314,8 +349,22 @@ public:
     afx_msg void OnDestroy() {
         KillTimer(kUiRefreshTimerId);
 
-        shuttingDown_.store(true);
+        if (shuttingDown_.exchange(true)) {
+            CFrameWnd::OnDestroy();
+            return;
+        }
+
         running_.store(false);
+
+        publishLoginButton_.EnableWindow(FALSE);
+        policyRejectButton_.EnableWindow(FALSE);
+        policyWaitButton_.EnableWindow(FALSE);
+        policyDropOldestButton_.EnableWindow(FALSE);
+        burstRawButton_.EnableWindow(FALSE);
+        burstCoalescedButton_.EnableWindow(FALSE);
+        toggleUiExecutorButton_.EnableWindow(FALSE);
+        resetCountersButton_.EnableWindow(FALSE);
+        publishSyncTickButton_.EnableWindow(FALSE);
 
         // Stop worker first so waiting publishers can return and exit cleanly.
         commandBus_.StopAsyncWorker();
@@ -329,33 +378,43 @@ public:
 
         if (loginToken_ != 0) {
             commandBus_.Unsubscribe(loginToken_);
+            loginToken_ = 0;
         }
         if (tickWorkerToken_ != 0) {
             commandBus_.Unsubscribe(tickWorkerToken_);
+            tickWorkerToken_ = 0;
         }
         if (uiScenarioToken_ != 0) {
             uiBus_.Unsubscribe(uiScenarioToken_);
+            uiScenarioToken_ = 0;
         }
         if (uiRefreshToken_ != 0) {
             uiBus_.Unsubscribe(uiRefreshToken_);
+            uiRefreshToken_ = 0;
         }
         if (cmdPublishLoginToken_ != 0) {
             commandBus_.Unsubscribe(cmdPublishLoginToken_);
+            cmdPublishLoginToken_ = 0;
         }
         if (cmdSetPolicyToken_ != 0) {
             commandBus_.Unsubscribe(cmdSetPolicyToken_);
+            cmdSetPolicyToken_ = 0;
         }
         if (cmdBurstToken_ != 0) {
             commandBus_.Unsubscribe(cmdBurstToken_);
+            cmdBurstToken_ = 0;
         }
         if (cmdToggleUiExecutorToken_ != 0) {
             commandBus_.Unsubscribe(cmdToggleUiExecutorToken_);
+            cmdToggleUiExecutorToken_ = 0;
         }
         if (cmdResetCountersToken_ != 0) {
             commandBus_.Unsubscribe(cmdResetCountersToken_);
+            cmdResetCountersToken_ = 0;
         }
         if (cmdPublishSyncTickToken_ != 0) {
             commandBus_.Unsubscribe(cmdPublishSyncTickToken_);
+            cmdPublishSyncTickToken_ = 0;
         }
 
         uiBus_.UnbindUiDispatcher();
@@ -539,6 +598,10 @@ private:
     }
 
     void RequestUiRefresh() {
+        if (shuttingDown_.load()) {
+            return;
+        }
+
         const eb::PublishStatus st = uiBus_.PublishUiRefresh();
         if (st != eb::PublishStatus::Ok) {
             if (::GetCurrentThreadId() != uiThreadId_) {
