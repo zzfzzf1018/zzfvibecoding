@@ -11,7 +11,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CommandEventBus.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="EventBus.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UiEventBus.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

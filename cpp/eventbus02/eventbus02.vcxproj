@@ -138,7 +138,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CommandEventBus.h" />
     <ClInclude Include="EventBus.h" />
+    <ClInclude Include="UiEventBus.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
