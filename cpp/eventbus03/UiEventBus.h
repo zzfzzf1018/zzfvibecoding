@@ -12,11 +12,19 @@
 
 namespace eb {
 
+enum class UiRefreshTarget : std::uint32_t {
+    None = 0,
+    StatusText = 1,
+    Caption = 2,
+    All = StatusText | Caption
+};
+
 struct UiScenarioNoteEvent {
     std::string text;
 };
 
 struct UiRefreshViewEvent {
+    std::uint32_t targetMask;
 };
 
 class UiEventBus : public EventBus {
@@ -29,7 +37,6 @@ public:
     UiEventBus()
         : maxPendingUiTasks_(4096),
           droppedUiTaskCount_(0),
-                    uiRefreshPending_(false),
           dispatcherHwnd_(NULL),
           dispatcherThreadId_(::GetCurrentThreadId()) {
         if (EnsureUiDispatcher()) {
@@ -86,21 +93,9 @@ public:
         return PublishSync(UiScenarioNoteEvent{text});
     }
 
-    PublishStatus PublishUiRefresh() {
-        {
-            std::lock_guard<std::mutex> lock(uiMutex_);
-            if (uiRefreshPending_) {
-                return PublishStatus::Ok;
-            }
-            uiRefreshPending_ = true;
-        }
-
-        const PublishStatus st = PublishSync(UiRefreshViewEvent{});
-        if (st != PublishStatus::Ok) {
-            std::lock_guard<std::mutex> lock(uiMutex_);
-            uiRefreshPending_ = false;
-        }
-        return st;
+    PublishStatus PublishUiRefresh(UiRefreshTarget target = UiRefreshTarget::All) {
+        const UiRefreshViewEvent refreshEvent{static_cast<std::uint32_t>(target)};
+        return PublishSync(refreshEvent);
     }
 
     void ConfigurePendingUiTaskLimit(std::size_t maxTasks) {
@@ -144,14 +139,7 @@ public:
         Obj* obj,
         void (Obj::*method)(const UiRefreshViewEvent&),
         RegistrationRule rule = RegistrationRule::OneToMany) {
-        return Subscribe<UiRefreshViewEvent>(
-            [this, obj, method](const UiRefreshViewEvent& e) {
-                (obj->*method)(e);
-                std::lock_guard<std::mutex> lock(uiMutex_);
-                uiRefreshPending_ = false;
-            },
-            rule,
-            DispatchTarget::UiThread);
+        return Subscribe<UiRefreshViewEvent>(obj, method, rule, DispatchTarget::UiThread);
     }
 
 private:
@@ -300,7 +288,6 @@ private:
     std::queue<std::function<void()> > pendingUiTasks_;
     std::size_t maxPendingUiTasks_;
     std::size_t droppedUiTaskCount_;
-    bool uiRefreshPending_;
     HWND dispatcherHwnd_;
     DWORD dispatcherThreadId_;
 };

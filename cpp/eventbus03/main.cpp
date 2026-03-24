@@ -27,6 +27,10 @@ constexpr int kControlToggleUiExecutor = 1008;
 constexpr int kControlResetCounters = 1009;
 constexpr int kControlPublishSyncTick = 1010;
 constexpr int kControlThreadedUpdateTest = 1011;
+
+bool HasRefreshTarget(const eb::UiRefreshViewEvent& e, eb::UiRefreshTarget target) {
+    return (e.targetMask & static_cast<std::uint32_t>(target)) != 0;
+}
 }
 
 class CMainFrame : public CFrameWnd {
@@ -442,9 +446,13 @@ private:
         lastScenarioNote_ = e.text;
     }
 
-    void OnUiRefreshView(const eb::UiRefreshViewEvent&) {
-        UpdateCaption();
-        UpdateStatusText();
+    void OnUiRefreshView(const eb::UiRefreshViewEvent& e) {
+        if (HasRefreshTarget(e, eb::UiRefreshTarget::Caption)) {
+            UpdateCaption();
+        }
+        if (HasRefreshTarget(e, eb::UiRefreshTarget::StatusText)) {
+            UpdateStatusText();
+        }
     }
 
     void PublishScenarioNote(const std::string& text) {
