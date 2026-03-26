@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <sstream>
+#include <functional>
 
 // 使用微软并发库命名空间
 using namespace concurrency;
@@ -67,21 +68,51 @@ task<void> MyAsyncMethod(cancellation_token token) {
 }
 
 // -----------------------------------------------------------------------------
-// 任务封装：析构时自动取消并等待，避免主线程退出后任务仍在运行
+// 任务封装：支持任意业务逻辑的异步任务
 // -----------------------------------------------------------------------------
 class AsyncJob {
 public:
-    AsyncJob() : token_source_(), task_() {}
+    using JobFunc = std::function<task<void>(cancellation_token)>;
+    using TimeoutCallback = std::function<void()>;
 
-    void Start() {
-        if (task_.is_done()) {
-            token_source_ = cancellation_token_source();
+    AsyncJob() : token_source_(), task_(), has_task_(false) {}
+
+    void Start(JobFunc job) {
+        CancelAndWait();
+        token_source_ = cancellation_token_source();
+        task_ = job(token_source_.get_token());
+        has_task_ = true;
+        has_timeout_ = false;
+    }
+
+    void StartWithTimeout(JobFunc job, int timeout_ms, TimeoutCallback on_timeout = nullptr) {
+        Start(job);
+        auto timeout_source = token_source_;
+        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+            if (on_timeout) {
+                on_timeout();
+            }
+            timeout_source.cancel();
+        });
+        has_timeout_ = true;
+    }
+
+    void Cancel() {
+        if (has_task_) {
+            token_source_.cancel();
         }
-        task_ = MyAsyncMethod(token_source_.get_token());
+    }
+
+    void Wait() {
+        if (!has_task_) {
+            return;
+        }
+        task_.get();
     }
 
     void CancelAndWait() {
-        token_source_.cancel();
+        Cancel();
         SafeWait();
     }
 
@@ -91,34 +122,152 @@ public:
 
 private:
     void SafeWait() {
-        if (!task_.is_done()) {
-            try {
-                task_.wait();
-            }
-            catch (const task_canceled&) {
-                // 取消是预期行为
-            }
-            catch (const std::exception& e) {
-                std::cout << "Exception: " << e.what() << std::endl;
-            }
+        if (!has_task_) {
+            return;
+        }
+        try {
+            task_.wait();
+        }
+        catch (const task_canceled&) {
+            // 取消是预期行为
+        }
+        catch (const std::exception& e) {
+            std::cout << "Exception: " << e.what() << std::endl;
         }
     }
 
     cancellation_token_source token_source_;
     task<void> task_;
+    bool has_task_;
+    task<void> timeout_task_;
+    bool has_timeout_;
 };
+
+// -----------------------------------------------------------------------------
+// 带返回值的异步任务封装
+// -----------------------------------------------------------------------------
+template <typename T>
+class AsyncJobT {
+public:
+    using JobFunc = std::function<task<T>(cancellation_token)>;
+    using TimeoutCallback = std::function<void()>;
+
+    AsyncJobT() : token_source_(), task_(), has_task_(false), has_timeout_(false) {}
+
+    void Start(JobFunc job) {
+        CancelAndWait();
+        token_source_ = cancellation_token_source();
+        task_ = job(token_source_.get_token());
+        has_task_ = true;
+        has_timeout_ = false;
+    }
+
+    void StartWithTimeout(JobFunc job, int timeout_ms, TimeoutCallback on_timeout = nullptr) {
+        Start(job);
+        auto timeout_source = token_source_;
+        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+            if (on_timeout) {
+                on_timeout();
+            }
+            timeout_source.cancel();
+        });
+        has_timeout_ = true;
+    }
+
+    void Cancel() {
+        if (has_task_) {
+            token_source_.cancel();
+        }
+    }
+
+    T Wait() {
+        if (!has_task_) {
+            return T();
+        }
+        return task_.get();
+    }
+
+    void CancelAndWait() {
+        Cancel();
+        SafeWait();
+    }
+
+    ~AsyncJobT() {
+        CancelAndWait();
+    }
+
+private:
+    T SafeWait() {
+        if (!has_task_) {
+            return T();
+        }
+        try {
+            return task_.get();
+        }
+        catch (const task_canceled&) {
+            // 取消是预期行为
+        }
+        catch (const std::exception& e) {
+            std::cout << "Exception: " << e.what() << std::endl;
+        }
+        return T();
+    }
+
+    cancellation_token_source token_source_;
+    task<T> task_;
+    bool has_task_;
+    task<void> timeout_task_;
+    bool has_timeout_;
+};
+
+// 带返回值的示例任务
+task<int> ComputeValueAsync(cancellation_token token) {
+    return AsyncDelay(300, token).then([]() {
+        return 42;
+    });
+}
 
 int main() {
     Log("Main started");
 
     // 启动异步任务 (由对象托管生命周期)
     AsyncJob job;
-    job.Start();
+    job.StartWithTimeout([](cancellation_token token) {
+        return MyAsyncMethod(token);
+    }, 1200, []() {
+        Log("MyAsyncMethod timeout");
+    });
+
+    // 启动带返回值的异步任务
+    AsyncJobT<int> job2;
+    job2.StartWithTimeout([](cancellation_token token) {
+        return ComputeValueAsync(token);
+    }, 1000, []() {
+        Log("ComputeValueAsync timeout");
+    });
 
     Log("Back in Main after calling async method");
 
     // 模拟主线程做其他事情
     std::this_thread::sleep_for(200ms);
+
+    // 等待带返回值任务完成并读取结果 (取消会抛异常)
+    try {
+        int value = job2.Wait();
+        std::cout << "Computed value: " << value << std::endl;
+    }
+    catch (const task_canceled&) {
+        std::cout << "ComputeValueAsync canceled" << std::endl;
+    }
+
+    // 等待 void 任务完成 (取消会抛异常)
+    try {
+        job.Wait();
+    }
+    catch (const task_canceled&) {
+        std::cout << "MyAsyncMethod canceled" << std::endl;
+    }
 
     Log("Main finished");
 
