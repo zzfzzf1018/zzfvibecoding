@@ -68,40 +68,165 @@ task<void> MyAsyncMethod(cancellation_token token) {
 }
 
 // -----------------------------------------------------------------------------
-// 任务封装：支持任意业务逻辑的异步任务
+// 通用异步任务封装
 // -----------------------------------------------------------------------------
+template <typename T>
 class AsyncJob {
 public:
-    using JobFunc = std::function<task<void>(cancellation_token)>;
+    using JobFunc = std::function<task<T>(cancellation_token)>;
     using TimeoutCallback = std::function<void()>;
+    using WorkFunc = std::function<T(cancellation_token)>;
 
-    AsyncJob() : token_source_(), task_(), has_task_(false) {}
+    AsyncJob() : token_source_(), timeout_token_source_(), task_(), has_task_(false), has_timeout_task_(false) {}
 
     void Start(JobFunc job) {
         CancelAndWait();
         token_source_ = cancellation_token_source();
         task_ = job(token_source_.get_token());
         has_task_ = true;
-        has_timeout_ = false;
+        timeout_token_source_.cancel();
+        has_timeout_task_ = false;
+    }
+
+    void StartFromCallable(WorkFunc work) {
+        Start([work](cancellation_token token) {
+            return create_task([work, token]() {
+                return work(token);
+            }, token);
+        });
     }
 
     void StartWithTimeout(JobFunc job, int timeout_ms, TimeoutCallback on_timeout = nullptr) {
         Start(job);
         auto timeout_source = token_source_;
-        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+        timeout_token_source_ = cancellation_token_source();
+        auto timeout_token = timeout_token_source_.get_token();
+        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout, timeout_token]() {
+            const int slice_ms = 50;
+            int remaining = timeout_ms;
+            while (remaining > 0) {
+                if (timeout_token.is_canceled()) {
+                    return;
+                }
+                const int step = remaining < slice_ms ? remaining : slice_ms;
+                std::this_thread::sleep_for(std::chrono::milliseconds(step));
+                remaining -= step;
+            }
             if (on_timeout) {
                 on_timeout();
             }
             timeout_source.cancel();
-        });
-        has_timeout_ = true;
+        }, timeout_token);
+        has_timeout_task_ = true;
     }
 
     void Cancel() {
         if (has_task_) {
             token_source_.cancel();
         }
+        timeout_token_source_.cancel();
+    }
+
+    T Wait() {
+        if (!has_task_) {
+            return T();
+        }
+        return task_.get();
+    }
+
+    void CancelAndWait() {
+        Cancel();
+        SafeWait();
+    }
+
+    ~AsyncJob() {
+        CancelAndWait();
+    }
+
+private:
+    T SafeWait() {
+        if (!has_task_) {
+            return T();
+        }
+        try {
+            task_.wait();
+            if (has_timeout_task_) {
+                timeout_task_.wait();
+            }
+        }
+        catch (const task_canceled&) {
+            // 取消是预期行为
+        }
+        catch (const std::exception& e) {
+            std::cout << "Exception: " << e.what() << std::endl;
+        }
+        return T();
+    }
+
+    cancellation_token_source token_source_;
+    cancellation_token_source timeout_token_source_;
+    task<T> task_;
+    bool has_task_;
+    task<void> timeout_task_;
+    bool has_timeout_task_;
+};
+
+// void 特化
+template <>
+class AsyncJob<void> {
+public:
+    using JobFunc = std::function<task<void>(cancellation_token)>;
+    using TimeoutCallback = std::function<void()>;
+    using WorkFunc = std::function<void(cancellation_token)>;
+
+    AsyncJob() : token_source_(), timeout_token_source_(), task_(), has_task_(false), has_timeout_task_(false) {}
+
+    void Start(JobFunc job) {
+        CancelAndWait();
+        token_source_ = cancellation_token_source();
+        task_ = job(token_source_.get_token());
+        has_task_ = true;
+        timeout_token_source_.cancel();
+        has_timeout_task_ = false;
+    }
+
+    void StartFromCallable(WorkFunc work) {
+        Start([work](cancellation_token token) {
+            return create_task([work, token]() {
+                work(token);
+            }, token);
+        });
+    }
+
+    void StartWithTimeout(JobFunc job, int timeout_ms, TimeoutCallback on_timeout = nullptr) {
+        Start(job);
+        auto timeout_source = token_source_;
+        timeout_token_source_ = cancellation_token_source();
+        auto timeout_token = timeout_token_source_.get_token();
+        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout, timeout_token]() {
+            const int slice_ms = 50;
+            int remaining = timeout_ms;
+            while (remaining > 0) {
+                if (timeout_token.is_canceled()) {
+                    return;
+                }
+                const int step = remaining < slice_ms ? remaining : slice_ms;
+                std::this_thread::sleep_for(std::chrono::milliseconds(step));
+                remaining -= step;
+            }
+            if (on_timeout) {
+                on_timeout();
+            }
+            timeout_source.cancel();
+        }, timeout_token);
+        has_timeout_task_ = true;
+    }
+
+    void Cancel() {
+        if (has_task_) {
+            token_source_.cancel();
+        }
+        timeout_token_source_.cancel();
     }
 
     void Wait() {
@@ -127,6 +252,9 @@ private:
         }
         try {
             task_.wait();
+            if (has_timeout_task_) {
+                timeout_task_.wait();
+            }
         }
         catch (const task_canceled&) {
             // 取消是预期行为
@@ -137,88 +265,11 @@ private:
     }
 
     cancellation_token_source token_source_;
+    cancellation_token_source timeout_token_source_;
     task<void> task_;
     bool has_task_;
     task<void> timeout_task_;
-    bool has_timeout_;
-};
-
-// -----------------------------------------------------------------------------
-// 带返回值的异步任务封装
-// -----------------------------------------------------------------------------
-template <typename T>
-class AsyncJobT {
-public:
-    using JobFunc = std::function<task<T>(cancellation_token)>;
-    using TimeoutCallback = std::function<void()>;
-
-    AsyncJobT() : token_source_(), task_(), has_task_(false), has_timeout_(false) {}
-
-    void Start(JobFunc job) {
-        CancelAndWait();
-        token_source_ = cancellation_token_source();
-        task_ = job(token_source_.get_token());
-        has_task_ = true;
-        has_timeout_ = false;
-    }
-
-    void StartWithTimeout(JobFunc job, int timeout_ms, TimeoutCallback on_timeout = nullptr) {
-        Start(job);
-        auto timeout_source = token_source_;
-        timeout_task_ = create_task([timeout_ms, timeout_source, on_timeout]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
-            if (on_timeout) {
-                on_timeout();
-            }
-            timeout_source.cancel();
-        });
-        has_timeout_ = true;
-    }
-
-    void Cancel() {
-        if (has_task_) {
-            token_source_.cancel();
-        }
-    }
-
-    T Wait() {
-        if (!has_task_) {
-            return T();
-        }
-        return task_.get();
-    }
-
-    void CancelAndWait() {
-        Cancel();
-        SafeWait();
-    }
-
-    ~AsyncJobT() {
-        CancelAndWait();
-    }
-
-private:
-    T SafeWait() {
-        if (!has_task_) {
-            return T();
-        }
-        try {
-            return task_.get();
-        }
-        catch (const task_canceled&) {
-            // 取消是预期行为
-        }
-        catch (const std::exception& e) {
-            std::cout << "Exception: " << e.what() << std::endl;
-        }
-        return T();
-    }
-
-    cancellation_token_source token_source_;
-    task<T> task_;
-    bool has_task_;
-    task<void> timeout_task_;
-    bool has_timeout_;
+    bool has_timeout_task_;
 };
 
 // 带返回值的示例任务
@@ -232,7 +283,7 @@ int main() {
     Log("Main started");
 
     // 启动异步任务 (由对象托管生命周期)
-    AsyncJob job;
+    AsyncJob<void> job;
     job.StartWithTimeout([](cancellation_token token) {
         return MyAsyncMethod(token);
     }, 1200, []() {
@@ -240,7 +291,7 @@ int main() {
     });
 
     // 启动带返回值的异步任务
-    AsyncJobT<int> job2;
+    AsyncJob<int> job2;
     job2.StartWithTimeout([](cancellation_token token) {
         return ComputeValueAsync(token);
     }, 1000, []() {
