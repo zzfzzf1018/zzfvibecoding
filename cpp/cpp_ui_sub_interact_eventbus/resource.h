@@ -1,0 +1,5 @@
+#pragma once
+
+#define ID_START_BACKGROUND_TASK 1001
+#define IDC_STATUS_STATIC 1002
+#define IDC_LOG_LIST 1003
