@@ -3,8 +3,11 @@
 #include <afxwin.h>
 
 #include <exception>
+#include <functional>
+#include <memory>
 #include <experimental/coroutine>
 #include <optional>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -85,6 +88,12 @@ class task;
 namespace details
 {
 template <typename T>
+using decay_t = typename std::decay<T>::type;
+
+template <typename T>
+using remove_cvref_t = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+
+template <typename T>
 struct final_awaiter
 {
     bool await_ready() const noexcept
@@ -106,6 +115,13 @@ struct final_awaiter
     {
     }
 };
+
+template <typename Object, typename Method, typename Tuple, size_t... Indices>
+auto invoke_member_from_tuple(Object& object, Method method, Tuple& arguments, std::index_sequence<Indices...>)
+    -> typename std::invoke_result<Method, Object&, decay_t<decltype(std::get<Indices>(arguments))>...>::type
+{
+    return std::mem_fn(method)(object, std::get<Indices>(arguments)...);
+}
 }
 
 template <typename T>
@@ -537,6 +553,163 @@ task<invoke_result_t<typename std::decay<Callable>::type>> background_invoke(Cal
     using callable_type = typename std::decay<Callable>::type;
     return background_invoke_impl<callable_type>(std::forward<Callable>(callable));
 }
+
+template <typename Object, typename Method, typename... Args>
+auto background_invoke_member(Object&& object, Method method, Args&&... args)
+    -> task<typename std::invoke_result<Method, details::decay_t<Object>&, details::decay_t<Args>...>::type>
+{
+    using object_type = details::decay_t<Object>;
+    using arguments_type = std::tuple<details::decay_t<Args>...>;
+
+    return background_invoke(
+        [captured_object = object_type(std::forward<Object>(object)),
+         captured_method = method,
+         captured_arguments = arguments_type(details::decay_t<Args>(std::forward<Args>(args))...)]() mutable -> decltype(auto)
+        {
+            return details::invoke_member_from_tuple(
+                captured_object,
+                captured_method,
+                captured_arguments,
+                std::index_sequence_for<Args...>{});
+        });
+}
+
+template <typename Object, typename Method, typename... Args>
+auto background_invoke_shared_member(std::shared_ptr<Object> object, Method method, Args&&... args)
+    -> task<typename std::invoke_result<Method, Object&, details::decay_t<Args>...>::type>
+{
+    using arguments_type = std::tuple<details::decay_t<Args>...>;
+
+    return background_invoke(
+        [captured_object = std::move(object),
+         captured_method = method,
+         captured_arguments = arguments_type(details::decay_t<Args>(std::forward<Args>(args))...)]() mutable -> decltype(auto)
+        {
+            return details::invoke_member_from_tuple(
+                *captured_object,
+                captured_method,
+                captured_arguments,
+                std::index_sequence_for<Args...>{});
+        });
+}
+
+template <typename Result, typename Object, typename Method, typename... Args>
+auto background_invoke_weak_member_impl(std::weak_ptr<Object> object, Method method, std::tuple<details::decay_t<Args>...> arguments, std::false_type)
+    -> task<std::optional<Result>>
+{
+    std::exception_ptr exception;
+    std::optional<Result> value;
+
+    co_await resume_background();
+
+    auto locked = object.lock();
+    if (locked)
+    {
+        try
+        {
+            value = details::invoke_member_from_tuple(
+                *locked,
+                method,
+                arguments,
+                std::index_sequence_for<Args...>{});
+        }
+        catch (...)
+        {
+            exception = std::current_exception();
+        }
+    }
+
+    co_await resume_ui();
+
+    if (exception)
+    {
+        std::rethrow_exception(exception);
+    }
+
+    co_return value;
+}
+
+template <typename Result, typename Object, typename Method, typename... Args>
+auto background_invoke_weak_member_impl(std::weak_ptr<Object> object, Method method, std::tuple<details::decay_t<Args>...> arguments, std::true_type)
+    -> task<bool>
+{
+    std::exception_ptr exception;
+    bool invoked = false;
+
+    co_await resume_background();
+
+    auto locked = object.lock();
+    if (locked)
+    {
+        invoked = true;
+
+        try
+        {
+            details::invoke_member_from_tuple(
+                *locked,
+                method,
+                arguments,
+                std::index_sequence_for<Args...>{});
+        }
+        catch (...)
+        {
+            exception = std::current_exception();
+        }
+    }
+
+    co_await resume_ui();
+
+    if (exception)
+    {
+        std::rethrow_exception(exception);
+    }
+
+    co_return invoked;
+}
+
+template <typename Object, typename Method, typename... Args>
+auto background_invoke_weak_member(std::weak_ptr<Object> object, Method method, Args&&... args)
+{
+    using result_type = typename std::invoke_result<Method, Object&, details::decay_t<Args>...>::type;
+    using arguments_type = std::tuple<details::decay_t<Args>...>;
+
+    return background_invoke_weak_member_impl<result_type, Object, Method, Args...>(
+        std::move(object),
+        method,
+        arguments_type(details::decay_t<Args>(std::forward<Args>(args))...),
+        std::is_void<result_type>{});
+}
+
+template <typename Callable>
+task<invoke_result_t<typename std::decay<Callable>::type>> AsyncCall(Callable&& callable)
+{
+    return background_invoke(std::forward<Callable>(callable));
+}
+
+template <typename Object, typename Method, typename... Args>
+auto AsyncCall(Object&& object, Method method, Args&&... args)
+    -> decltype(background_invoke_member(std::forward<Object>(object), method, std::forward<Args>(args)...))
+{
+    return background_invoke_member(std::forward<Object>(object), method, std::forward<Args>(args)...);
+}
+
+template <typename Object, typename Method, typename... Args>
+auto AsyncCall(std::shared_ptr<Object> object, Method method, Args&&... args)
+    -> decltype(background_invoke_shared_member(std::move(object), method, std::forward<Args>(args)...))
+{
+    return background_invoke_shared_member(std::move(object), method, std::forward<Args>(args)...);
+}
+
+template <typename Object, typename Method, typename... Args>
+auto TryAsyncCall(std::weak_ptr<Object> object, Method method, Args&&... args)
+    -> decltype(background_invoke_weak_member(std::move(object), method, std::forward<Args>(args)...))
+{
+    return background_invoke_weak_member(std::move(object), method, std::forward<Args>(args)...);
+}
 }
 
 #define CPPV141_ASYNC(expr) ::cppv141async::background_invoke([&]() -> decltype(auto) { return (expr); })
+#define CPPV141_ASYNC_MEMBER(type, object, method, ...) ::cppv141async::background_invoke_member((object), &type::method, __VA_ARGS__)
+#define CPPV141_ASYNC_MEMBER_AUTO(object, method, ...) ::cppv141async::background_invoke_member((object), &::cppv141async::details::remove_cvref_t<decltype(object)>::method, __VA_ARGS__)
+#define CPPV141_ASYNC_SHARED_MEMBER(object, method, ...) ::cppv141async::background_invoke_shared_member((object), &::cppv141async::details::remove_cvref_t<decltype(*(object))>::method, __VA_ARGS__)
+#define CPPV141_ASYNC_WEAK_MEMBER(object, method, ...) ::cppv141async::background_invoke_weak_member((object), &::cppv141async::details::remove_cvref_t<decltype(*((object).lock()))>::method, __VA_ARGS__)

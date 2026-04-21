@@ -46,7 +46,6 @@ cppv141async::fire_and_forget CMainDlg::LoadDataAsync()
     const auto lifetime = lifetime_;
     const HWND dialog_handle = GetSafeHwnd();
     const int request_id = next_request_id_++;
-    const BizService service = biz_service_;
 
     load_button_.EnableWindow(FALSE);
     status_static_.SetWindowTextW(L"Loading from worker thread...");
@@ -54,7 +53,7 @@ cppv141async::fire_and_forget CMainDlg::LoadDataAsync()
 
     try
     {
-        auto report = co_await CPPV141_ASYNC(service.QuerySlowReport(request_id));
+        auto report = co_await cppv141async::AsyncCall(biz_service_, &BizService::QuerySlowReport, request_id);
 
         if (!lifetime->alive.load() || !::IsWindow(dialog_handle))
         {
