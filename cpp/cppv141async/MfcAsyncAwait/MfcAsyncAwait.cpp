@@ -1,6 +1,6 @@
 #include "MfcAsyncAwait.h"
 
-#include "AsyncAwait.h"
+#include "Dispatcher.h"
 #include "MainDlg.h"
 
 CMfcAsyncAwaitApp theApp;

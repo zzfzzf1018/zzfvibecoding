@@ -15,10 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AsyncCall.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="AsyncAwait.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="BizService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Dispatcher.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MainDlg.h">
@@ -30,12 +36,15 @@
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Task.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AsyncAwait.cpp">
+    <ClCompile Include="BizService.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BizService.cpp">
+    <ClCompile Include="Dispatcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="MainDlg.cpp">

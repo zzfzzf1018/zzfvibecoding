@@ -63,8 +63,12 @@ cppv141async::fire_and_forget CMainDlg::LoadDataAsync()
         CString status;
         status.Format(L"Completed on UI thread %lu", ::GetCurrentThreadId());
 
+        CString output;
+        output.Append(L"Business result\r\n\r\n");
+        output.Append(report);
+
         ::SetDlgItemTextW(dialog_handle, IDC_STATIC_STATUS, status);
-        ::SetDlgItemTextW(dialog_handle, IDC_EDIT_RESULT, report);
+        ::SetDlgItemTextW(dialog_handle, IDC_EDIT_RESULT, output);
         ::EnableWindow(::GetDlgItem(dialog_handle, IDC_BUTTON_LOAD), TRUE);
     }
     catch (const std::exception& ex)

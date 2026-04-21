@@ -157,15 +157,17 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="AsyncAwait.h" />
+    <ClInclude Include="AsyncCall.h" />
     <ClInclude Include="BizService.h" />
+    <ClInclude Include="Dispatcher.h" />
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="MfcAsyncAwait.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="Task.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AsyncAwait.cpp" />
     <ClCompile Include="BizService.cpp" />
+    <ClCompile Include="Dispatcher.cpp" />
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="MfcAsyncAwait.cpp" />
   </ItemGroup>

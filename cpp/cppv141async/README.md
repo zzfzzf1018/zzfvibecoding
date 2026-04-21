@@ -11,64 +11,52 @@
 
 本示例基于 MSVC `/await` 和 `std::experimental::coroutine`。
 
-核心能力在 `MfcAsyncAwait/AsyncAwait.h` 中：
+这套 `task<T>` 对可复制业务结果类型最稳，例如 `CString`、`std::wstring`、普通值对象。
+如果返回值是复杂 move-only 类型，建议额外审查生命周期和所有权转移路径。
 
-- `cppv141async::resume_background()`：切到线程池线程
-- `cppv141async::resume_ui()`：切回 MFC UI 线程
-- `cppv141async::background_invoke(...)`：把任意同步调用放到后台执行，并在返回前切回 UI 线程
-- `cppv141async::background_invoke_member(...)`：把成员函数调用所需对象、副本参数一起固化到后台任务
-- `cppv141async::background_invoke_shared_member(...)`：用 `shared_ptr` 托管后台任务中的服务对象生命周期
-- `cppv141async::background_invoke_weak_member(...)`：用 `weak_ptr` 尝试调用对象成员，失效时安全跳过
-- `cppv141async::AsyncCall(...)`：更接近 C# 调用风格的函数式入口
-- `cppv141async::TryAsyncCall(...)`：针对 `weak_ptr` 的安全尝试调用入口
-- `CPPV141_ASYNC(expr)`：把原来的同步调用表达式直接包装成可 `co_await` 的异步调用
-- `CPPV141_ASYNC_MEMBER(Type, object, method, ...)`：更适合成员函数调用的安全包装
-- `CPPV141_ASYNC_MEMBER_AUTO(object, method, ...)`：自动推导对象类型的成员调用包装
-- `CPPV141_ASYNC_SHARED_MEMBER(sharedPtr, method, ...)`：面向 `shared_ptr` 服务对象的成员调用包装
-- `CPPV141_ASYNC_WEAK_MEMBER(weakPtr, method, ...)`：面向 `weak_ptr` 服务对象的成员调用包装
+代码结构已经拆分为三层：
+
+- `MfcAsyncAwait/Task.h`：协程返回类型 `task<T>` 和 `fire_and_forget`
+- `MfcAsyncAwait/Dispatcher.h`：后台线程与 UI 线程切换
+- `MfcAsyncAwait/AsyncCall.h`：公开调用入口 `AsyncCall(...)` 和 `TryAsyncCall(...)`
+
+新代码直接面向 `AsyncCall(...)` 与 `TryAsyncCall(...)`，不需要再关心旧的宏式包装入口。
 
 ## 每种方式的示例
 
-### 1. 普通表达式包装
+### 1. 普通可调用对象
 
 ```cpp
-auto text = co_await CPPV141_ASYNC(m_service.QuerySlowReport(requestId));
+auto text = co_await cppv141async::AsyncCall([requestId, service = m_service]() {
+    return service.QuerySlowReport(requestId);
+});
 m_resultEdit.SetWindowTextW(text);
 ```
 
-这里 `m_service.QuerySlowReport(requestId)` 仍然是同步函数，不需要改成回调、future、promise 或额外的异步版本。
+这里同步业务逻辑仍然不需要改签名，只是通过 lambda 明确把后台需要的数据按值捕获进去。
 
-### 2. 显式类型的成员函数包装
+### 2. 值对象成员函数
 
 ```cpp
-auto text = co_await CPPV141_ASYNC_MEMBER(BizService, m_service, QuerySlowReport, requestId);
+auto text = co_await cppv141async::AsyncCall(m_service, &BizService::QuerySlowReport, requestId);
 m_resultEdit.SetWindowTextW(text);
 ```
 
-### 3. 自动推导类型的成员函数包装
+### 3. `shared_ptr` 成员函数
 
 ```cpp
-auto text = co_await CPPV141_ASYNC_MEMBER_AUTO(m_service, QuerySlowReport, requestId);
-m_resultEdit.SetWindowTextW(text);
-```
-
-这个 helper 会把 `m_service` 和 `requestId` 都按值固化到后台任务里，减少因为 `this` 或局部引用跨线程失效导致的崩溃。
-
-### 4. `shared_ptr` 成员函数包装
-
-```cpp
-auto text = co_await CPPV141_ASYNC_SHARED_MEMBER(m_servicePtr, QuerySlowReport, requestId);
+auto text = co_await cppv141async::AsyncCall(m_servicePtr, &BizService::QuerySlowReport, requestId);
 m_resultEdit.SetWindowTextW(text);
 ```
 
 这个版本会在后台任务存活期间持有 `shared_ptr`，更适合真正和生命周期绑定的业务服务。
 
-### 5. `weak_ptr` 成员函数包装
+### 4. `weak_ptr` 尝试调用
 
 返回值不是 `void` 时，结果类型是 `std::optional<T>`：
 
 ```cpp
-auto maybeText = co_await CPPV141_ASYNC_WEAK_MEMBER(m_serviceWeak, QuerySlowReport, requestId);
+auto maybeText = co_await cppv141async::TryAsyncCall(m_serviceWeak, &BizService::QuerySlowReport, requestId);
 if (maybeText)
 {
     m_resultEdit.SetWindowTextW(*maybeText);
@@ -85,7 +73,7 @@ if (!invoked)
 }
 ```
 
-### 6. 更接近 C# 的函数式调用风格
+### 5. 更接近 C# 的函数式调用风格
 
 普通可调用对象：
 
@@ -95,23 +83,7 @@ auto text = co_await cppv141async::AsyncCall([requestId, service = m_service]() 
 });
 ```
 
-成员函数：
-
-```cpp
-auto text = co_await cppv141async::AsyncCall(m_service, &BizService::QuerySlowReport, requestId);
-```
-
-`shared_ptr` 成员函数：
-
-```cpp
-auto text = co_await cppv141async::AsyncCall(m_servicePtr, &BizService::QuerySlowReport, requestId);
-```
-
-`weak_ptr` 尝试调用：
-
-```cpp
-auto maybeText = co_await cppv141async::TryAsyncCall(m_serviceWeak, &BizService::QuerySlowReport, requestId);
-```
+成员函数、`shared_ptr`、`weak_ptr` 场景也统一走 `AsyncCall(...)` / `TryAsyncCall(...)`，这样公开 API 只有一层，不再需要额外记忆宏名字。
 
 ## MFC UI 窗口推荐模式
 
@@ -165,8 +137,9 @@ cppv141async::fire_and_forget CMainDlg::LoadDataAsync()
 
 ## 文件说明
 
-- `MfcAsyncAwait/AsyncAwait.h`：协程任务类型、线程切换 awaiter、辅助宏
-- `MfcAsyncAwait/AsyncAwait.cpp`：UI 线程调度器实现
+- `MfcAsyncAwait/Task.h`：协程任务类型 `task<T>` 与 `fire_and_forget`
+- `MfcAsyncAwait/Dispatcher.h` + `MfcAsyncAwait/Dispatcher.cpp`：线程切换与 UI 调度器
+- `MfcAsyncAwait/AsyncCall.h`：公开异步调用入口 `AsyncCall(...)` 与 `TryAsyncCall(...)`，这是 header-only 模块
 - `MfcAsyncAwait/BizService.*`：模拟耗时业务逻辑
 - `MfcAsyncAwait/MainDlg.*`：MFC 对话框示例
 
