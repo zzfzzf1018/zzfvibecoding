@@ -1,0 +1,12 @@
+[
+  {
+    "directory": "C:/flyingdev01/zzfvibecoding/others/cppchecktool/tests/samples",
+    "command": "cl /c risky.cpp",
+    "file": "risky.cpp"
+  },
+  {
+    "directory": "C:/flyingdev01/zzfvibecoding/others/cppchecktool/tests/samples",
+    "command": "cl /c clean.cpp",
+    "file": "clean.cpp"
+  }
+]

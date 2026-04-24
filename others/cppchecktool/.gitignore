@@ -1,0 +1,30 @@
+# CMake
+/build/
+/build-*/
+/CMakeUserPresets.json
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/compile_commands.json
+
+# Visual Studio
+/.vs/
+*.suo
+*.user
+*.vcxproj.user
+*.VC.db
+*.opendb
+
+# Build outputs
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+
+# Reports
+*.sarif
+
+# Editor
+.DS_Store

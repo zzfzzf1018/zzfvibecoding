@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 12,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs2022-debug",
+      "displayName": "VS2022 Debug",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/vs2022-debug",
+      "architecture": {
+        "value": "x64"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "displayName": "Ninja Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "vs2017-v141-release",
+      "displayName": "VS2017 v141 Release",
+      "generator": "Visual Studio 15 2017",
+      "binaryDir": "${sourceDir}/build/vs2017-v141-release",
+      "architecture": {
+        "value": "x64"
+      },
+      "toolset": {
+        "value": "v141"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-vs2022-debug",
+      "configurePreset": "vs2022-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "build-ninja-debug",
+      "configurePreset": "ninja-debug"
+    },
+    {
+      "name": "build-vs2017-v141-release",
+      "configurePreset": "vs2017-v141-release",
+      "configuration": "Release"
+    }
+  ]
+}

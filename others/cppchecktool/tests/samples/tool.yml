@@ -1,0 +1,5 @@
+target: .
+format: text
+backend: builtin
+exclude:
+  - clean.cpp
