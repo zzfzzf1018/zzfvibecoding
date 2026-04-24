@@ -1,0 +1,23 @@
+app:
+  database_path: data/stcompare.db
+  report_dir: reports
+  timezone: Asia/Shanghai
+  log_level: INFO
+
+provider:
+  name: akshare
+  retry_attempts: 3
+  retry_backoff_seconds: 2.0
+  request_pause_seconds: 0.5
+
+schedule:
+  mode: interval
+  minutes: 720
+  cron: null
+  max_instances: 1
+  coalesce: true
+
+watchlist:
+  - symbol: SH600519
+    name: Kweichow Moutai
+    enabled: true

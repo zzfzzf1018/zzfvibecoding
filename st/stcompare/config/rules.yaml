@@ -1,0 +1,52 @@
+diff:
+  min_change_ratio: 0.2
+  min_absolute_change: 1000000
+  max_diff_rows: 30
+
+aliases:
+  revenue:
+    - total_operating_revenue
+    - operating_revenue
+    - revenue
+  net_profit:
+    - net_profit
+    - parent_net_profit
+    - netprofit
+  operating_cash_flow:
+    - net_cash_flow_operating
+    - operating_cash_flow
+    - net_cash_from_operating_activities
+  total_assets:
+    - total_assets
+    - assets_total
+  total_liabilities:
+    - total_liabilities
+    - liabilities_total
+
+rules:
+  - name: revenue_large_move
+    key: revenue
+    severity: warning
+    change_ratio_gte: 0.2
+    negative_turn: false
+    message: Revenue changed sharply.
+  - name: net_profit_negative_turn
+    key: net_profit
+    severity: critical
+    change_ratio_gte: 0.25
+    negative_turn: true
+    message: Net profit deteriorated significantly or turned negative.
+  - name: operating_cash_flow_negative_turn
+    key: operating_cash_flow
+    severity: critical
+    change_ratio_gte: 0.25
+    negative_turn: true
+    message: Operating cash flow deteriorated significantly or turned negative.
+
+derived_rules:
+  - name: debt_ratio_spike
+    severity: warning
+    numerator_key: total_liabilities
+    denominator_key: total_assets
+    delta_gte: 0.08
+    message: Debt ratio changed sharply.
