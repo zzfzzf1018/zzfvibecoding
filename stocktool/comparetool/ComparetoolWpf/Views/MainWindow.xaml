@@ -1,0 +1,19 @@
+<Window x:Class="ComparetoolWpf.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ComparetoolWpf.ViewModels"
+        xmlns:views="clr-namespace:ComparetoolWpf.Views"
+        Title="A股财报对比工具" Height="780" Width="1280"
+        FontFamily="Microsoft YaHei" FontSize="13">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+    <TabControl>
+        <TabItem Header="单股期间对比">
+            <views:SinglePeriodCompareView DataContext="{Binding SingleVm}" />
+        </TabItem>
+        <TabItem Header="多股横向对比（百分比报表）">
+            <views:MultiStockCompareView DataContext="{Binding MultiVm}" />
+        </TabItem>
+    </TabControl>
+</Window>
