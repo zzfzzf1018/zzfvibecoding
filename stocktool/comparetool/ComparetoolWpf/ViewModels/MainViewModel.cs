@@ -3,16 +3,23 @@ using ComparetoolWpf.Services;
 
 namespace ComparetoolWpf.ViewModels;
 
-/// <summary>主窗体 ViewModel：聚合两个功能页面的子 VM。</summary>
+/// <summary>主窗体 ViewModel：聚合各功能页面的子 VM。</summary>
 public partial class MainViewModel : ObservableObject
 {
     public SinglePeriodCompareViewModel SingleVm { get; }
     public MultiStockCompareViewModel MultiVm { get; }
+    public MetricsViewModel MetricsVm { get; }
+    public TrendChartViewModel TrendVm { get; }
 
     public MainViewModel()
     {
-        var svc = new EastMoneyService();
-        SingleVm = new SinglePeriodCompareViewModel(svc);
-        MultiVm = new MultiStockCompareViewModel(svc);
+        var api = new EastMoneyService();
+        var cache = new ReportCache();
+        var data = new StockDataService(api, cache);
+
+        SingleVm = new SinglePeriodCompareViewModel(data);
+        MultiVm = new MultiStockCompareViewModel(data);
+        MetricsVm = new MetricsViewModel(data);
+        TrendVm = new TrendChartViewModel(data);
     }
 }

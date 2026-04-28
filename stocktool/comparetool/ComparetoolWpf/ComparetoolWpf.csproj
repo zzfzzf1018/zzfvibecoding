@@ -18,6 +18,12 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <!-- CommunityToolkit.Mvvm：提供 ObservableObject / RelayCommand，简化 MVVM -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- SQLite 本地缓存 -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+    <!-- Excel 导出（无需安装 Office） -->
+    <PackageReference Include="ClosedXML" Version="0.102.2" />
+    <!-- 图表 -->
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
   </ItemGroup>
 
 </Project>

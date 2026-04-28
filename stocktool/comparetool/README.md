@@ -1,13 +1,19 @@
 # A 股财报对比工具 (ComparetoolWpf)
 
 一个基于 **C# / WPF (.NET 8)** 的桌面应用，用于查询 A 股上市公司的三大财务报表，
-并提供两类核心分析能力：
+并提供四类核心分析能力：
 
 1. **单股期间对比**：选定一只股票，加载其多期（年报 / 中报 / 季报）报表，
    选择任意两期进行差异比较，自动高亮变化幅度超过阈值的指标。
 2. **多股横向对比（百分比报表）**：选定多只股票，加载同一报告期的同一报表，
    将每个指标按“基准项”（资产总计 / 营业总收入 / 经营活动现金流入小计）
    折算成百分比，便于跨公司同口径比较。
+3. **同比 / 环比 + 杜邦分析**：自动计算指定指标的 YoY / QoQ 序列；
+   ROE 杜邦三因素拆解（净利率 × 资产周转率 × 权益乘数）。
+4. **趋势图（OxyPlot）**：多只股票同一指标的多期趋势曲线绘制。
+
+所有功能都支持 **导出为 Excel / CSV**，并使用 **SQLite 本地缓存** 报表数据，
+重复加载不再调用接口。
 
 > 数据来源：东方财富公开 F10 接口，无需注册或 API Key。
 
@@ -70,6 +76,29 @@ $$
 每只股票生成两列：原始数值 + 百分比，可直接横向比较结构差异
 （如毛利率、费用率、资产构成等）。
 
+### 3.3 同比 / 环比 / 杜邦分析
+
+1. 搜索 → 选股 → 选择 **报告期类型**（建议年报） → **加载并分析**。
+2. 在“同比/环比指标”下拉中选择任意一个指标，下方上半区显示：
+   - 本期值 / 同比基期 / 同比 / 环比基期 / 环比；
+3. 下半区固定显示 **ROE 杜邦拆解**：
+   $$
+   \text{ROE} = \frac{\text{净利润}}{\text{营收}} \times \frac{\text{营收}}{\text{总资产}} \times \frac{\text{总资产}}{\text{股东权益}}
+   $$
+4. 两个表格都可一键 **导出 Excel / CSV**。
+
+### 3.4 趋势图
+
+1. 加入多只股票，选择 **报表 / 报告期类型 / 指标**。
+2. 点击 **绘制趋势**，OxyPlot 控件渲染多曲线对比，便于查看指标历史走势。
+
+### 3.5 缓存
+
+- 缓存数据库文件位置：`%LocalAppData%\ComparetoolWpf\reports.db`。
+- 默认策略：本地有 ≥ 4 期且最新报告期不超过 1 年的，直接走缓存；
+  否则调用接口刷新，并把新数据回写覆盖。
+- 单股对比页面提供 **强制刷新(忽略缓存)** 复选框，按需绕过缓存。
+
 ---
 
 ## 4. 项目结构
@@ -80,24 +109,36 @@ ComparetoolWpf/
 ├─ Models/                             # 数据模型
 │   ├─ StockInfo.cs                    # 股票基本信息
 │   ├─ FinancialReport.cs              # 单期报表
-│   └─ ComparisonRow.cs                # 对比结果行
+│   ├─ ComparisonRow.cs                # 对比结果行
+│   └─ MetricsRows.cs                  # 同比/环比/杜邦行
 ├─ Services/
-│   ├─ EastMoneyService.cs             # 东方财富数据访问
-│   └─ ComparisonService.cs            # 期间对比 / 同口径对比 计算
+│   ├─ EastMoneyService.cs             # 东方财富数据访问（F10 真实接口）
+│   ├─ ReportCache.cs                  # SQLite 本地缓存
+│   ├─ StockDataService.cs             # 缓存优先门面
+│   ├─ ComparisonService.cs            # 期间对比 / 同口径对比 计算
+│   ├─ MetricsService.cs               # 同比/环比/ROE 杜邦
+│   └─ ExportService.cs                # CSV / Excel 导出（ClosedXML）
 ├─ ViewModels/                         # MVVM 视图模型
 │   ├─ MainViewModel.cs
 │   ├─ SinglePeriodCompareViewModel.cs
-│   └─ MultiStockCompareViewModel.cs
+│   ├─ MultiStockCompareViewModel.cs
+│   ├─ MetricsViewModel.cs
+│   └─ TrendChartViewModel.cs
 ├─ Views/                              # WPF 视图
 │   ├─ MainWindow.xaml
 │   ├─ SinglePeriodCompareView.xaml
-│   └─ MultiStockCompareView.xaml
+│   ├─ MultiStockCompareView.xaml
+│   ├─ MetricsView.xaml
+│   └─ TrendChartView.xaml
 └─ Converters/Converters.cs            # 显示用 IValueConverter
 ```
 
 依赖：
 - [Newtonsoft.Json](https://www.newtonsoft.com/json) — 解析 JSON
 - [CommunityToolkit.Mvvm](https://learn.microsoft.com/dotnet/communitytoolkit/mvvm/) — MVVM 基础
+- [Microsoft.Data.Sqlite](https://learn.microsoft.com/dotnet/standard/data/sqlite/) — 本地缓存
+- [ClosedXML](https://github.com/ClosedXML/ClosedXML) — Excel 导出
+- [OxyPlot.Wpf](https://oxyplot.github.io/) — 图表绘制
 
 ---
 
@@ -115,11 +156,9 @@ ComparetoolWpf/
 
 ## 6. 扩展建议
 
-- **导出**：基于 `DataGrid` 内容导出 CSV / Excel（可引入 `EPPlus` / `ClosedXML`）。
-- **指标计算**：在 `ComparisonService` 之上叠加“同比 / 环比 / 杜邦分析 / ROE 拆解”等。
-- **缓存**：把已下载的报表缓存到本地 SQLite（`Microsoft.Data.Sqlite`），减少接口压力。
-- **绘图**：使用 `OxyPlot` 或 `LiveCharts2` 展示趋势曲线。
+- **指标计算**：在 `MetricsService` 上叠加“营运资本变化、自由现金流、现金转换周期”等。
 - **数据源**：可以通过实现一个 `IFinancialDataSource` 抽象，接入 Tushare / Choice 等付费数据源。
+- **国际化**：把字段映射拆为多个 JSON 资源文件，按公司类型（一般/银行/证券/保险）切换。
 
 ---
 

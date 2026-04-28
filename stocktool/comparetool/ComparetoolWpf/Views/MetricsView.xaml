@@ -1,0 +1,76 @@
+<UserControl x:Class="ComparetoolWpf.Views.MetricsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:ComparetoolWpf.Converters">
+    <UserControl.Resources>
+        <conv:NullableDoubleConverter x:Key="NumConv" />
+        <conv:PercentConverter x:Key="PercentConv" />
+    </UserControl.Resources>
+
+    <DockPanel Margin="8">
+        <!-- 顶部 -->
+        <Border DockPanel.Dock="Top" Padding="6" BorderBrush="#DDD" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="股票:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox Width="180" Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="搜索" Margin="6,0" Padding="10,2" Command="{Binding SearchCommand}" />
+                    <ComboBox Width="220" ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedStock}" />
+                    <TextBlock Text="    报告期:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                    <ComboBox Width="100" ItemsSource="{Binding PeriodTypes}" SelectedItem="{Binding SelectedPeriodType}" />
+                    <Button Content="加载并分析" Margin="10,0,0,0" Padding="14,4" Command="{Binding LoadAndAnalyzeCommand}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="同比/环比指标:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Width="280" ItemsSource="{Binding AllMetrics}" SelectedItem="{Binding SelectedMetric}" />
+                    <Button Content="导出同比环比..." Margin="10,0,0,0" Padding="10,2" Command="{Binding ExportGrowthCommand}" />
+                    <Button Content="导出杜邦..." Margin="10,0,0,0" Padding="10,2" Command="{Binding ExportDuPontCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 主体：上下两个 DataGrid -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <GroupBox Header="同比 / 环比" Grid.Row="0">
+                <DataGrid ItemsSource="{Binding GrowthRows}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                          AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="报告期" Binding="{Binding PeriodLabel}" Width="120"/>
+                        <DataGridTextColumn Header="本期值" Binding="{Binding Value, Converter={StaticResource NumConv}}" Width="160"/>
+                        <DataGridTextColumn Header="同比基期" Binding="{Binding YoYBase, Converter={StaticResource NumConv}}" Width="160"/>
+                        <DataGridTextColumn Header="同比" Binding="{Binding YoY, Converter={StaticResource PercentConv}}" Width="100"/>
+                        <DataGridTextColumn Header="环比基期" Binding="{Binding QoQBase, Converter={StaticResource NumConv}}" Width="160"/>
+                        <DataGridTextColumn Header="环比" Binding="{Binding QoQ, Converter={StaticResource PercentConv}}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" Background="#EEE"/>
+
+            <GroupBox Header="ROE 杜邦拆解 (ROE = 净利率 × 资产周转率 × 权益乘数)" Grid.Row="2">
+                <DataGrid ItemsSource="{Binding DuPontRows}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                          AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="报告期" Binding="{Binding PeriodLabel}" Width="110"/>
+                        <DataGridTextColumn Header="净利润" Binding="{Binding NetProfit, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="营业总收入" Binding="{Binding Revenue, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="资产总计" Binding="{Binding TotalAssets, Converter={StaticResource NumConv}}" Width="160"/>
+                        <DataGridTextColumn Header="股东权益" Binding="{Binding Equity, Converter={StaticResource NumConv}}" Width="160"/>
+                        <DataGridTextColumn Header="净利率" Binding="{Binding NetMargin, Converter={StaticResource PercentConv}}" Width="100"/>
+                        <DataGridTextColumn Header="资产周转率" Binding="{Binding AssetTurnover, Converter={StaticResource PercentConv}}" Width="120"/>
+                        <DataGridTextColumn Header="权益乘数" Binding="{Binding EquityMultiplier, ConverterParameter=2, Converter={StaticResource NumConv}}" Width="100"/>
+                        <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+        </Grid>
+    </DockPanel>
+</UserControl>
