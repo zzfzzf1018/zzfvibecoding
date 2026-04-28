@@ -27,5 +27,8 @@
         <TabItem Header="趋势图">
             <views:TrendChartView DataContext="{Binding TrendVm}" />
         </TabItem>
+        <TabItem Header="⚙ 设置">
+            <views:SettingsView DataContext="{Binding SettingsVm}" />
+        </TabItem>
     </TabControl>
 </Window>

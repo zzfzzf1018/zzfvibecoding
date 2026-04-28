@@ -1,0 +1,64 @@
+<UserControl x:Class="ComparetoolWpf.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Text="数据源" FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
+            <TextBlock Text="{Binding CurrentSourceText}" Foreground="#3A6B33" Margin="0,0,0,8"/>
+
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="数据源:" Width="100" VerticalAlignment="Center"/>
+                <ComboBox Width="200" ItemsSource="{Binding AllModes}"
+                          SelectedItem="{Binding DataSource}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding DataSourceDescription}" TextWrapping="Wrap"
+                       Foreground="#666" Margin="100,4,0,12" FontSize="12"/>
+
+            <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,12,0,0" Margin="0,8,0,0">
+                <StackPanel>
+                    <TextBlock Text="网络与重试" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <TextBlock Text="重试次数:" Width="100" VerticalAlignment="Center"/>
+                        <TextBox Width="80" Text="{Binding RetryAttempts}"/>
+                        <TextBlock Text="包含首次。每个数据源单独适用。" Margin="10,0,0,0"
+                                   Foreground="#888" VerticalAlignment="Center" FontSize="12"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <TextBlock Text="退避基础(ms):" Width="100" VerticalAlignment="Center"/>
+                        <TextBox Width="80" Text="{Binding RetryBaseDelayMs}"/>
+                        <TextBlock Text="后续按 3× 指数退避：500/1500/4500..." Margin="10,0,0,0"
+                                   Foreground="#888" VerticalAlignment="Center" FontSize="12"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <TextBlock Text="HTTP 超时(秒):" Width="100" VerticalAlignment="Center"/>
+                        <TextBox Width="80" Text="{Binding HttpTimeoutSeconds}"/>
+                        <TextBlock Text="(应用于新创建的请求；当前会话需重启或测试后生效)" Margin="10,0,0,0"
+                                   Foreground="#888" VerticalAlignment="Center" FontSize="12"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button Content="保存并应用" Padding="20,6" Command="{Binding SaveCommand}"/>
+                <Button Content="测试当前选择" Margin="10,0,0,0" Padding="14,6" Command="{Binding TestSourceCommand}"/>
+                <Button Content="恢复默认" Margin="10,0,0,0" Padding="14,6" Command="{Binding ResetCommand}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding TestResult}" Margin="0,8,0,0" Foreground="#36598A"/>
+
+            <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,12,0,0" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="文件位置" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding SettingsPath, StringFormat='设置文件: {0}'}" Foreground="#444" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LogDirectory, StringFormat='日志目录: {0}'}" Foreground="#444" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="打开日志目录" Padding="10,3" Command="{Binding OpenLogFolderCommand}"/>
+                        <Button Content="打开设置目录" Margin="10,0,0,0" Padding="10,3" Command="{Binding OpenSettingsFileCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Margin="0,18,0,0" Foreground="#888" FontSize="12" TextWrapping="Wrap"
+                       Text="说明：自动模式下，每次接口调用按顺序尝试 东方财富 → 雪球 → 新浪，任一成功立即返回；新浪当前仅支持搜索。各源字段映射使用相同中文名，跨源拼装的报表可无缝对比。"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -21,9 +21,11 @@ namespace ComparetoolWpf.Services;
 /// 注：东方财富接口字段及命名可能随时调整。本类只做轻量适配，遇到接口变化时
 /// 只需修改 <see cref="ParseF10Reports"/> 与字段映射字典。
 /// </summary>
-public class EastMoneyService
+public class EastMoneyService : IStockDataSource
 {
     private readonly HttpClient _http;
+
+    public string Name => "东方财富";
 
     public EastMoneyService()
     {

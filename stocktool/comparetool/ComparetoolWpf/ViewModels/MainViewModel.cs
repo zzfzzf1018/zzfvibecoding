@@ -15,9 +15,8 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
-        var api = new EastMoneyService();
         var cache = new ReportCache();
-        var data = new StockDataService(api, cache);
+        var data = new StockDataService(cache);
         var watch = new WatchlistService(cache);
 
         WatchlistVm = new WatchlistViewModel(data, watch);
@@ -26,5 +25,8 @@ public partial class MainViewModel : ObservableObject
         MetricsVm = new MetricsViewModel(data);
         TrendVm = new TrendChartViewModel(data, watch);
         ScreenerVm = new ScreenerViewModel(new ScreenerService(), watch);
+        SettingsVm = new SettingsViewModel();
     }
+
+    public SettingsViewModel SettingsVm { get; }
 }

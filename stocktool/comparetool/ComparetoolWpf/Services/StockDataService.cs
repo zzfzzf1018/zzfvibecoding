@@ -3,21 +3,23 @@ using ComparetoolWpf.Models;
 namespace ComparetoolWpf.Services;
 
 /// <summary>
-/// 数据访问门面：先查 SQLite 缓存，缺数据再调用东方财富，并把新数据回写缓存。
+/// 数据访问门面：先查 SQLite 缓存，缺数据再调用底层 <see cref="IStockDataSource"/>，并把新数据回写缓存。
+/// 数据源由 <see cref="DataSourceFactory"/> 提供，可通过设置切换。
 /// </summary>
 public class StockDataService
 {
-    private readonly EastMoneyService _api;
     private readonly ReportCache _cache;
 
-    public StockDataService(EastMoneyService api, ReportCache cache)
+    public StockDataService(ReportCache cache)
     {
-        _api = api;
         _cache = cache;
     }
 
+    /// <summary>当前生效的数据源（实时反映用户设置切换）。</summary>
+    private IStockDataSource Source => DataSourceFactory.Current;
+
     public Task<List<StockInfo>> SearchStocksAsync(string keyword, CancellationToken ct = default)
-        => _api.SearchStocksAsync(keyword, ct);
+        => Source.SearchStocksAsync(keyword, ct);
 
     /// <summary>
     /// 获取报表（带缓存）。
@@ -48,7 +50,7 @@ public class StockDataService
             }
         }
 
-        var fetched = await _api.GetReportsAsync(stock, kind, ReportPeriodType.All, pageSize, ct);
+        var fetched = await Source.GetReportsAsync(stock, kind, ReportPeriodType.All, pageSize, ct);
         if (fetched.Count > 0) _cache.Save(fetched);
 
         return FilterAndOrder(fetched, periodType, pageSize);

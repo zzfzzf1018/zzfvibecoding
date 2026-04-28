@@ -53,3 +53,12 @@ Excel 行高亮导出：当前 ClosedXML 仅写文本，可在导出对比表时
 打包：dotnet publish -c Release -r win-x64 --self-contained + PublishSingleFile=true 出一个绿色 exe，便于分发给非开发者用户
  BUG: 选股器如果选择了行业之后就查不到数据了
 BUG: 选股器如果选择了报告期2026/10/7 也查不到数据了
+
+=============
+
+接下来:
+接口降级（雪球/新浪）：要新写 2 个 Adapter 并加重试退避策略,
+增加设置界面可以切换数据源
+
+======
+
