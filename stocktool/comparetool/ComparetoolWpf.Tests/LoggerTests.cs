@@ -16,7 +16,11 @@ public class LoggerTests
 
         var path = Path.Combine(Logger.LogDirectory, DateTime.Today.ToString("yyyy-MM-dd") + ".log");
         Assert.True(File.Exists(path));
-        var content = File.ReadAllText(path);
+        // 其它并发测试可能正在写同一日志文件，使用共享读
+        string content;
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var sr = new StreamReader(fs))
+            content = sr.ReadToEnd();
         Assert.Contains("INFO", content);
         Assert.Contains("WARN", content);
         Assert.Contains("ERROR", content);

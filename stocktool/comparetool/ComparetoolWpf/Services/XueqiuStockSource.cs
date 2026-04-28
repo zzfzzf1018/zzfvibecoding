@@ -44,20 +44,77 @@ public class XueqiuStockSource : IStockDataSource
         _http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/plain, */*");
     }
 
-    /// <summary>访问首页让服务器写入 xq_a_token cookie。</summary>
+    /// <summary>
+    /// 访问雪球若干公开页面以获取 <c>xq_a_token</c> / <c>u</c> 等 cookie。
+    /// 由于雪球首页加了 WAF，单纯 GET <c>/</c> 不一定下发 token；
+    /// 因此依次尝试若干轻量页面，只要 cookie 容器里出现 <c>xq_a_token</c> 就视为成功。
+    /// </summary>
     private async Task EnsureBootstrappedAsync(CancellationToken ct)
     {
-        if (_bootstrapped && (DateTime.UtcNow - _bootstrappedAt).TotalMinutes < 30) return;
+        if (_bootstrapped && (DateTime.UtcNow - _bootstrappedAt).TotalMinutes < 30
+            && HasToken()) return;
         await _bootLock.WaitAsync(ct);
         try
         {
-            if (_bootstrapped && (DateTime.UtcNow - _bootstrappedAt).TotalMinutes < 30) return;
-            using var resp = await _http.GetAsync("https://xueqiu.com/", ct);
-            // 不强求 200，只要 cookie 写入即可
+            if (_bootstrapped && (DateTime.UtcNow - _bootstrappedAt).TotalMinutes < 30
+                && HasToken()) return;
+
+            string[] candidates =
+            {
+                "https://xueqiu.com/hq",
+                "https://xueqiu.com/S/SH600000",
+                "https://xueqiu.com/",
+            };
+            foreach (var url in candidates)
+            {
+                try
+                {
+                    using var resp = await _http.GetAsync(url, ct);
+                    // 不强求 200，只要 cookie 写入即可
+                    if (HasToken()) break;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"雪球 bootstrap {url} 失败：{ex.Message}");
+                }
+            }
             _bootstrapped = true;
             _bootstrappedAt = DateTime.UtcNow;
+            if (!HasToken())
+                Logger.Warn("雪球 bootstrap 未获取到 xq_a_token cookie，后续请求可能被 WAF 拒绝。");
         }
         finally { _bootLock.Release(); }
+    }
+
+    private bool HasToken()
+    {
+        var cookies = _handler.CookieContainer.GetCookies(new Uri("https://xueqiu.com"));
+        foreach (Cookie c in cookies)
+        {
+            if (c.Name == "xq_a_token" && !string.IsNullOrEmpty(c.Value)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>检查雪球 API 通用错误：<c>{ success:false, error_code, error_description }</c>
+    /// 或 <c>{ code: 4xxxxx, success:false }</c>。命中时抛 <see cref="HttpRequestException"/>
+    /// 以便上层 Retry/Composite 自动重试或降级。</summary>
+    private static void ThrowIfXueqiuError(JObject jo)
+    {
+        bool? ok = jo.Value<bool?>("success");
+        // 旧 API: error_code != 0 也代表失败
+        var errCode = jo.Value<string?>("error_code");
+        var errDesc = jo.Value<string?>("error_description");
+        var code = jo.Value<int?>("code");
+        var msg = jo.Value<string?>("message");
+        bool failed = ok == false
+                      || (errCode != null && errCode != "0")
+                      || (code.HasValue && code.Value >= 400000);
+        if (failed)
+        {
+            var detail = errDesc ?? msg ?? errCode ?? code?.ToString() ?? "未知错误";
+            throw new HttpRequestException($"雪球接口拒绝请求：{detail}");
+        }
     }
 
     public async Task<List<StockInfo>> SearchStocksAsync(string keyword, CancellationToken ct = default)
@@ -68,6 +125,7 @@ public class XueqiuStockSource : IStockDataSource
         var url = $"https://xueqiu.com/query/v1/suggest_stock.json?q={Uri.EscapeDataString(keyword)}";
         var json = await _http.GetStringAsync(url, ct);
         var jo = JObject.Parse(json);
+        ThrowIfXueqiuError(jo);
         var list = new List<StockInfo>();
         if (jo["data"] is not JArray data) return list;
 
@@ -112,6 +170,7 @@ public class XueqiuStockSource : IStockDataSource
                   $"?symbol={stock.FullCode}&type={typeParam}&is_detail=true&count={pageSize}";
         var json = await _http.GetStringAsync(url, ct);
         var jo = JObject.Parse(json);
+        ThrowIfXueqiuError(jo);
         if (jo["data"] is not JObject d) return new List<FinancialReport>();
         if (d["list"] is not JArray rows) return new List<FinancialReport>();
 

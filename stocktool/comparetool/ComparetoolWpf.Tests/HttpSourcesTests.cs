@@ -80,15 +80,18 @@ public class HttpSourcesTests
     [Fact]
     public async Task Sina_Search_ParsesGbkPayload()
     {
-        // 手工构造伪 JSONP；即便 GBK 解码失败也应能 UTF8 兜底
-        var body = "var suggestvalue=\"11,A,sh600000,浦发银行,puhua;11,A,sz000001,平安银行,pingan;11,A,bad,bad,bad\";";
-        var bytes = Encoding.UTF8.GetBytes(body);
+        // 真实返回字段顺序：name,type,code,fullCode,...
+        var body = "var suggestvalue=\"浦发银行,11,600000,sh600000,puhua,,浦发银行,99,1,ESG,,;" +
+                   "平安银行,11,000001,sz000001,pingan,,平安银行,99,1,,,;" +
+                   "bad,11,bad,bad,bad\";";
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = Encoding.GetEncoding("GBK").GetBytes(body);
         var handler = new StubHttpMessageHandler((_, _) => StubHttpMessageHandler.Bytes(bytes));
         var svc = new SinaStockSource(handler);
         var r = await svc.SearchStocksAsync("银行");
         Assert.Equal(2, r.Count);
-        Assert.Contains(r, s => s.FullCode == "SH600000");
-        Assert.Contains(r, s => s.FullCode == "SZ000001");
+        Assert.Contains(r, s => s.FullCode == "SH600000" && s.Name == "浦发银行");
+        Assert.Contains(r, s => s.FullCode == "SZ000001" && s.Name == "平安银行");
     }
 
     [Fact]
@@ -170,5 +173,25 @@ public class HttpSourcesTests
         var handler = new StubHttpMessageHandler("{}");
         var svc = new XueqiuStockSource(handler);
         Assert.Empty(await svc.GetReportsAsync(new StockInfo("1", "n", "SH"), k));
+    }
+
+    [Fact]
+    public async Task Xueqiu_Search_ApiError_Throws_ForFallback()
+    {
+        // WAF 未通过时雪球返回 {"code":400016,"success":false}
+        var handler = new StubHttpMessageHandler("{\"code\":400016,\"message\":\"\",\"success\":false}");
+        var svc = new XueqiuStockSource(handler);
+        await Assert.ThrowsAsync<System.Net.Http.HttpRequestException>(
+            () => svc.SearchStocksAsync("x"));
+    }
+
+    [Fact]
+    public async Task Xueqiu_GetReports_ApiError_Throws_ForFallback()
+    {
+        var handler = new StubHttpMessageHandler("{\"error_code\":\"400016\",\"error_description\":\"请求被拦截\"}");
+        var svc = new XueqiuStockSource(handler);
+        var ex = await Assert.ThrowsAsync<System.Net.Http.HttpRequestException>(
+            () => svc.GetReportsAsync(new StockInfo("600000", "n", "SH"), ReportKind.Income));
+        Assert.Contains("请求被拦截", ex.Message);
     }
 }

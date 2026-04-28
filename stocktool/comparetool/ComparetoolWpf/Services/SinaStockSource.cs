@@ -58,13 +58,18 @@ public class SinaStockSource : IStockDataSource
         {
             var fields = entry.Split(',');
             if (fields.Length < 4) continue;
-            // 期望：[type=11, A, SH600000, 浦发银行, ...]
-            var fullCode = fields[2];          // 形如 sh600000 / sz000001
-            var name = fields[3];
+            // 真实返回字段顺序（多源验证 2024+）：
+            //   [0] 显示名称  浦发银行
+            //   [1] 类型 11=A股
+            //   [2] 6 位代码  600000
+            //   [3] 带前缀全代码 sh600000 / sz000001
+            //   [4..] 拼音/简拼/标签等
+            var name = fields[0];
+            var fullCode = fields[3];
             if (fullCode.Length < 8) continue;
             var market = fullCode.Substring(0, 2).ToUpperInvariant();
             var code = fullCode.Substring(2);
-            if (market != "SH" && market != "SZ") continue;
+            if (market != "SH" && market != "SZ" && market != "BJ") continue;
             if (code.Length != 6 || !code.All(char.IsDigit)) continue;
             list.Add(new StockInfo(code, name, market));
         }
