@@ -96,6 +96,16 @@ public class ScreenerService
     {
         if (!string.IsNullOrEmpty(f.IndustryContains) &&
             (r.Industry == null || !r.Industry.Contains(f.IndustryContains))) return false;
+        if (f.IndustryAnyOf != null && f.IndustryAnyOf.Count > 0)
+        {
+            if (string.IsNullOrEmpty(r.Industry)) return false;
+            bool any = false;
+            foreach (var kw in f.IndustryAnyOf)
+            {
+                if (!string.IsNullOrEmpty(kw) && r.Industry.Contains(kw)) { any = true; break; }
+            }
+            if (!any) return false;
+        }
         if (f.RoeMin.HasValue && (!r.Roe.HasValue || r.Roe < f.RoeMin)) return false;
         if (f.GrossMarginMin.HasValue && (!r.GrossMargin.HasValue || r.GrossMargin < f.GrossMarginMin)) return false;
         if (f.NetMarginMin.HasValue && (!r.NetMargin.HasValue || r.NetMargin < f.NetMarginMin)) return false;

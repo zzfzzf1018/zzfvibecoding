@@ -7,6 +7,7 @@
         <conv:NullableDoubleConverter x:Key="NumConv" />
         <conv:PercentConverter x:Key="PercentConv" />
         <conv:HighlightBackgroundConverter x:Key="HlBgConv" />
+        <conv:ChangeBackgroundConverter x:Key="ChangeBgConv" />
     </UserControl.Resources>
 
     <DockPanel Margin="8">
@@ -22,7 +23,6 @@
                               ItemsSource="{Binding SearchResults}"
                               SelectedItem="{Binding SelectedStock}"
                               IsTextSearchEnabled="False" />
-                    <Button Content="搜索" Margin="6,0" Padding="10,2" Command="{Binding SearchCommand}" />
                     <TextBlock Text="    报表:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                     <ComboBox Width="120" ItemsSource="{Binding ReportKinds}" SelectedItem="{Binding SelectedReportKind}" />
                     <TextBlock Text="    报告期:" VerticalAlignment="Center" Margin="10,0,4,0"/>
@@ -49,11 +49,19 @@
         <!-- 主体：差异表 -->
         <DataGrid ItemsSource="{Binding ComparisonRows}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
-                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                  AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="{Binding IsHighlighted, Converter={StaticResource HlBgConv}}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <SolidColorBrush Color="#FFE0E0" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </DataTrigger>
+                    </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>

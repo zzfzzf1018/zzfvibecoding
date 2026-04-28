@@ -9,8 +9,11 @@ public class ScreenerFilter
     /// <summary>报告期，必填，例如 "2024-12-31"。</summary>
     public string ReportDate { get; set; } = string.Empty;
 
-    /// <summary>行业关键字（按行业名称模糊匹配）。</summary>
+    /// <summary>行业关键字（按行业名称模糊匹配，单个）。</summary>
     public string? IndustryContains { get; set; }
+
+    /// <summary>行业多选关键字：行业名称只要包含其中任意一个即视为匹配。</summary>
+    public List<string>? IndustryAnyOf { get; set; }
 
     /// <summary>ROE（加权）下限。</summary>
     public double? RoeMin { get; set; }

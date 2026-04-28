@@ -13,11 +13,19 @@
                 <TextBlock Text="选股条件（留空表示不限）" FontWeight="Bold" Margin="0,0,0,4"/>
                 <UniformGrid Columns="4" Rows="3">
                     <StackPanel Orientation="Horizontal" Margin="2">
-                        <TextBlock Text="报告期(yyyy-MM-dd):" Width="140" VerticalAlignment="Center"/>
-                        <TextBox Width="120" Text="{Binding ReportDate, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="报告期:" Width="80" VerticalAlignment="Center"/>
+                        <DatePicker Width="140" SelectedDate="{Binding ReportDateValue}"
+                                    ToolTip="选择报告期。常用：3-31 一季报，6-30 中报，9-30 三季报，12-31 年报。"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="2">
-                        <TextBlock Text="行业关键字:" Width="100" VerticalAlignment="Center"/>
+                        <TextBlock Text="行业:" Width="60" VerticalAlignment="Center"/>
+                        <Button Content="{Binding IndustriesDisplay}" Width="180"
+                                Command="{Binding PickIndustriesCommand}"
+                                ToolTip="点击打开行业多选窗口；可同时勾选多个行业，结果取并集。"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="2">
+                        <TextBlock Text="行业关键字:" Width="100" VerticalAlignment="Center"
+                                   ToolTip="附加单关键字模糊匹配（与多选条件叠加生效）。"/>
                         <TextBox Width="120" Text="{Binding IndustryContains, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="2">
@@ -44,9 +52,11 @@
                         <TextBlock Text="EPS ≥ (元):" Width="100" VerticalAlignment="Center"/>
                         <TextBox Width="80" Text="{Binding EpsMin, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="2">
+                    <StackPanel Orientation="Horizontal" Margin="2"
+                                ToolTip="每页 200 只。MaxPages=5 → 最多扫描 1000 只(按更新时间倒序)。&#x000a;A 股全市场约 5000+ 只，要扫全市场可调到 30。值越大越慢。">
                         <TextBlock Text="最大翻页:" Width="100" VerticalAlignment="Center"/>
                         <TextBox Width="60" Text="{Binding MaxPages, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="(×200 只)" Margin="6,0,0,0" VerticalAlignment="Center" Foreground="#888"/>
                     </StackPanel>
                 </UniformGrid>
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">

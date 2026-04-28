@@ -54,3 +54,31 @@ public class HighlightBackgroundConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// 根据变化率 + 阈值返回背景色：
+///   |change| 超过阈值且为正 -> 浅绿；
+///   |change| 超过阈值且为负 -> 浅红；
+///   否则透明。
+/// 通过 MultiBinding 传入 (ChangeRatio, ThresholdPercent)。
+/// </summary>
+public class ChangeBackgroundConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Length < 2) return Brushes.Transparent;
+        double? change = values[0] as double?;
+        double threshold = 0.2;
+        if (values[1] is double t) threshold = t / 100.0;
+        else if (values[1] is string s && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var ts))
+            threshold = ts / 100.0;
+        if (!change.HasValue) return Brushes.Transparent;
+        if (Math.Abs(change.Value) < threshold) return Brushes.Transparent;
+        return change.Value >= 0
+            ? new SolidColorBrush(Color.FromRgb(0xDC, 0xF5, 0xDC))   // 浅绿
+            : new SolidColorBrush(Color.FromRgb(0xFF, 0xDC, 0xDC));  // 浅红
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
