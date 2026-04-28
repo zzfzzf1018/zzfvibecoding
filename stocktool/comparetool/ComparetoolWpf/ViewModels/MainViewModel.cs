@@ -6,6 +6,7 @@ namespace ComparetoolWpf.ViewModels;
 /// <summary>主窗体 ViewModel：聚合各功能页面的子 VM。</summary>
 public partial class MainViewModel : ObservableObject
 {
+    public WatchlistViewModel WatchlistVm { get; }
     public SinglePeriodCompareViewModel SingleVm { get; }
     public MultiStockCompareViewModel MultiVm { get; }
     public MetricsViewModel MetricsVm { get; }
@@ -17,11 +18,13 @@ public partial class MainViewModel : ObservableObject
         var api = new EastMoneyService();
         var cache = new ReportCache();
         var data = new StockDataService(api, cache);
+        var watch = new WatchlistService(cache);
 
-        SingleVm = new SinglePeriodCompareViewModel(data);
-        MultiVm = new MultiStockCompareViewModel(data);
+        WatchlistVm = new WatchlistViewModel(data, watch);
+        SingleVm = new SinglePeriodCompareViewModel(data, watch);
+        MultiVm = new MultiStockCompareViewModel(data, watch);
         MetricsVm = new MetricsViewModel(data);
-        TrendVm = new TrendChartViewModel(data);
-        ScreenerVm = new ScreenerViewModel(new ScreenerService());
+        TrendVm = new TrendChartViewModel(data, watch);
+        ScreenerVm = new ScreenerViewModel(new ScreenerService(), watch);
     }
 }

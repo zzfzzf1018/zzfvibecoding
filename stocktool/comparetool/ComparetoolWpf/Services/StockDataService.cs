@@ -76,4 +76,11 @@ public class StockDataService
 
     /// <summary>清空缓存。</summary>
     public void ClearCache() => _cache.Clear();
+
+    /// <summary>返回某只股票某种报表的最近一次拉取时间(本地时间)；不存在返回 null。</summary>
+    public DateTime? GetLastFetchedAtLocal(string fullCode, ReportKind kind)
+    {
+        var utc = _cache.GetLastFetchedAt(fullCode, kind);
+        return utc?.ToLocalTime();
+    }
 }

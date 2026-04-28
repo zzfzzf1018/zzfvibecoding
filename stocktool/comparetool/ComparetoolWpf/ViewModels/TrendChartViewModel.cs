@@ -16,10 +16,12 @@ namespace ComparetoolWpf.ViewModels;
 public partial class TrendChartViewModel : ObservableObject
 {
     private readonly StockDataService _data;
+    private readonly WatchlistService _watch;
 
-    public TrendChartViewModel(StockDataService data)
+    public TrendChartViewModel(StockDataService data, WatchlistService watch)
     {
         _data = data;
+        _watch = watch;
         ReportKinds = new[] { ReportKind.Balance, ReportKind.Income, ReportKind.CashFlow };
         PeriodTypes = new[]
         {
@@ -72,6 +74,11 @@ public partial class TrendChartViewModel : ObservableObject
     public ObservableCollection<string> AllMetrics { get; }
     [ObservableProperty] private string? _selectedMetric;
 
+    /// <summary>是否归一化（首期=100），便于跨股票比较涨幅。</summary>
+    [ObservableProperty] private bool _normalize;
+    /// <summary>Y 轴是否对数刻度。</summary>
+    [ObservableProperty] private bool _useLogAxis;
+
     [ObservableProperty] private PlotModel _plotModel;
 
     partial void OnSelectedReportKindChanged(ReportKind value)
@@ -120,6 +127,14 @@ public partial class TrendChartViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ImportWatchlist()
+    {
+        foreach (var s in _watch.Items)
+            if (!SelectedStocks.Any(x => x.FullCode == s.FullCode))
+                SelectedStocks.Add(s);
+    }
+
+    [RelayCommand]
     private async Task PlotAsync()
     {
         if (SelectedStocks.Count == 0 || string.IsNullOrEmpty(SelectedMetric))
@@ -130,7 +145,9 @@ public partial class TrendChartViewModel : ObservableObject
 
         var model = new PlotModel
         {
-            Title = $"{SelectedMetric} 趋势 ({SelectedReportKind} / {SelectedPeriodType})",
+            Title = $"{SelectedMetric} 趋势 ({SelectedReportKind} / {SelectedPeriodType})"
+                    + (Normalize ? "  [首期=100 归一化]" : "")
+                    + (UseLogAxis ? "  [对数]" : ""),
             IsLegendVisible = true,
         };
         model.Legends.Add(new OxyPlot.Legends.Legend
@@ -145,29 +162,61 @@ public partial class TrendChartViewModel : ObservableObject
             Title = "报告期",
             IntervalType = DateTimeIntervalType.Years,
         });
-        model.Axes.Add(new LinearAxis
+        if (UseLogAxis)
         {
-            Position = AxisPosition.Left,
-            Title = SelectedMetric,
-        });
+            model.Axes.Add(new LogarithmicAxis
+            {
+                Position = AxisPosition.Left,
+                Title = Normalize ? "归一化值（首期=100）" : (SelectedMetric ?? string.Empty),
+                Base = 10,
+            });
+        }
+        else
+        {
+            model.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                Title = Normalize ? "归一化值（首期=100）" : (SelectedMetric ?? string.Empty),
+            });
+        }
 
         try
         {
             foreach (var stock in SelectedStocks)
             {
                 var reports = await _data.GetReportsAsync(stock, SelectedReportKind, SelectedPeriodType, pageSize: 30);
+                var ordered = reports.OrderBy(r => r.ReportDate).ToList();
+                // 找首个有效值用于归一化
+                double? baseValue = null;
+                if (Normalize)
+                {
+                    foreach (var r in ordered)
+                    {
+                        if (r.Items.TryGetValue(SelectedMetric!, out var bv) && bv.HasValue && Math.Abs(bv.Value) > 1e-9)
+                        {
+                            baseValue = bv.Value;
+                            break;
+                        }
+                    }
+                    if (!baseValue.HasValue) continue; // 该股票没有可作基准的值
+                }
+
                 var series = new LineSeries
                 {
                     Title = stock.Name,
                     MarkerType = MarkerType.Circle,
                     MarkerSize = 4,
                     StrokeThickness = 2,
+                    TrackerFormatString = "{0}\n{1:yyyy-MM-dd}: {2:N2}",
                 };
-                foreach (var r in reports.OrderBy(r => r.ReportDate))
+                foreach (var r in ordered)
                 {
-                    if (r.Items.TryGetValue(SelectedMetric, out var v) && v.HasValue)
+                    if (r.Items.TryGetValue(SelectedMetric!, out var v) && v.HasValue)
                     {
-                        series.Points.Add(DateTimeAxis.CreateDataPoint(r.ReportDate, v.Value));
+                        var y = v.Value;
+                        if (Normalize && baseValue.HasValue) y = y / baseValue.Value * 100.0;
+                        if (UseLogAxis && y <= 0) continue; // 对数轴丢弃非正值
+                        series.Points.Add(DateTimeAxis.CreateDataPoint(r.ReportDate, y));
                     }
                 }
                 if (series.Points.Count > 0) model.Series.Add(series);

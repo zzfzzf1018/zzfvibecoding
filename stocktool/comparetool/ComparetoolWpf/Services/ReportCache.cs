@@ -51,8 +51,81 @@ CREATE TABLE IF NOT EXISTS Reports(
     ItemsJson     TEXT NOT NULL,
     UpdatedAt     TEXT NOT NULL,
     PRIMARY KEY (StockFullCode, Kind, ReportDate)
+);
+CREATE TABLE IF NOT EXISTS Watchlist(
+    FullCode  TEXT PRIMARY KEY,
+    Code      TEXT NOT NULL,
+    Name      TEXT NOT NULL,
+    Market    TEXT NOT NULL,
+    AddedAt   TEXT NOT NULL,
+    Note      TEXT
 );";
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>返回某只股票某种报表的最近一次拉取时间(UTC)；不存在返回 null。</summary>
+    public DateTime? GetLastFetchedAt(string stockFullCode, ReportKind kind)
+    {
+        using var conn = new SqliteConnection(_connStr);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT MAX(UpdatedAt) FROM Reports WHERE StockFullCode=$c AND Kind=$k";
+        cmd.Parameters.AddWithValue("$c", stockFullCode);
+        cmd.Parameters.AddWithValue("$k", (int)kind);
+        var v = cmd.ExecuteScalar();
+        if (v == null || v == DBNull.Value) return null;
+        return DateTime.Parse((string)v);
+    }
+
+    // ===== 自选股 =====
+
+    public List<StockInfo> LoadWatchlist()
+    {
+        using var conn = new SqliteConnection(_connStr);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT Code, Name, Market FROM Watchlist ORDER BY AddedAt ASC";
+        using var rdr = cmd.ExecuteReader();
+        var list = new List<StockInfo>();
+        while (rdr.Read())
+            list.Add(new StockInfo(rdr.GetString(0), rdr.GetString(1), rdr.GetString(2)));
+        return list;
+    }
+
+    public void AddWatch(StockInfo s, string? note = null)
+    {
+        using var conn = new SqliteConnection(_connStr);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT OR REPLACE INTO Watchlist(FullCode, Code, Name, Market, AddedAt, Note)
+                            VALUES($f,$c,$n,$m,$t,$o)";
+        cmd.Parameters.AddWithValue("$f", s.FullCode);
+        cmd.Parameters.AddWithValue("$c", s.Code);
+        cmd.Parameters.AddWithValue("$n", s.Name);
+        cmd.Parameters.AddWithValue("$m", s.Market);
+        cmd.Parameters.AddWithValue("$t", DateTime.UtcNow.ToString("o"));
+        cmd.Parameters.AddWithValue("$o", (object?)note ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void RemoveWatch(string fullCode)
+    {
+        using var conn = new SqliteConnection(_connStr);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"DELETE FROM Watchlist WHERE FullCode=$f";
+        cmd.Parameters.AddWithValue("$f", fullCode);
+        cmd.ExecuteNonQuery();
+    }
+
+    public bool IsWatched(string fullCode)
+    {
+        using var conn = new SqliteConnection(_connStr);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT 1 FROM Watchlist WHERE FullCode=$f LIMIT 1";
+        cmd.Parameters.AddWithValue("$f", fullCode);
+        return cmd.ExecuteScalar() != null;
     }
 
     /// <summary>读取某只股票某种报表的所有缓存（按报告期倒序）。</summary>

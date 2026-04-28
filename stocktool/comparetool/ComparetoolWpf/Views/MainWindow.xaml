@@ -12,6 +12,9 @@
         <TabItem Header="选股器">
             <views:ScreenerView DataContext="{Binding ScreenerVm}" />
         </TabItem>
+        <TabItem Header="★ 自选股">
+            <views:WatchlistView DataContext="{Binding WatchlistVm}" />
+        </TabItem>
         <TabItem Header="单股期间对比">
             <views:SinglePeriodCompareView DataContext="{Binding SingleVm}" />
         </TabItem>

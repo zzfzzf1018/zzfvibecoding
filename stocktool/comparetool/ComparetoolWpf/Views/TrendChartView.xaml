@@ -13,6 +13,7 @@
                               SelectedItem="{Binding SearchSelected}"
                               IsTextSearchEnabled="False" />
                     <Button Content="加入" Margin="10,0,0,0" Padding="10,2" Command="{Binding AddStockCommand}" />
+                    <Button Content="从自选导入" Margin="6,0,0,0" Padding="10,2" Command="{Binding ImportWatchlistCommand}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <TextBlock Text="股票:" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -26,6 +27,12 @@
                     <ComboBox Width="100" ItemsSource="{Binding PeriodTypes}" SelectedItem="{Binding SelectedPeriodType}" />
                     <TextBlock Text="    指标:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                     <ComboBox Width="220" ItemsSource="{Binding AllMetrics}" SelectedItem="{Binding SelectedMetric}" />
+                    <CheckBox Content="归一化(首期=100)" Margin="10,0,0,0" VerticalAlignment="Center"
+                              IsChecked="{Binding Normalize}"
+                              ToolTip="把每条曲线第一期值归为 100，方便跨股票比较涨幅"/>
+                    <CheckBox Content="对数轴" Margin="10,0,0,0" VerticalAlignment="Center"
+                              IsChecked="{Binding UseLogAxis}"
+                              ToolTip="Y 轴改用对数刻度，适合数值跨度大或长期增长的指标"/>
                     <Button Content="绘制趋势" Margin="10,0,0,0" Padding="14,4" Command="{Binding PlotCommand}" />
                 </StackPanel>
             </StackPanel>

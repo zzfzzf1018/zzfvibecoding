@@ -5,6 +5,18 @@
     <UserControl.Resources>
         <conv:NullableDoubleConverter x:Key="NumConv" />
         <conv:PercentConverter x:Key="PercentConv" />
+        <Style x:Key="DupNetMargin" TargetType="DataGridColumnHeader">
+            <Setter Property="ToolTip" Value="净利率 = 净利润 / 营业总收入"/>
+        </Style>
+        <Style x:Key="DupTurnover" TargetType="DataGridColumnHeader">
+            <Setter Property="ToolTip" Value="资产周转率 = 营业总收入 / 资产总计"/>
+        </Style>
+        <Style x:Key="DupEquityMul" TargetType="DataGridColumnHeader">
+            <Setter Property="ToolTip" Value="权益乘数 = 资产总计 / 股东权益（衡量财务杠杆，值越高负债越多）"/>
+        </Style>
+        <Style x:Key="DupRoe" TargetType="DataGridColumnHeader">
+            <Setter Property="ToolTip" Value="ROE = 净利润 / 股东权益 = 净利率 × 资产周转率 × 权益乘数"/>
+        </Style>
     </UserControl.Resources>
 
     <DockPanel Margin="8">
@@ -59,7 +71,8 @@
 
             <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" Background="#EEE"/>
 
-            <GroupBox Header="ROE 杜邦拆解 (ROE = 净利率 × 资产周转率 × 权益乘数)" Grid.Row="2">
+            <GroupBox Header="ROE 杜邦拆解 (ROE = 净利率 × 资产周转率 × 权益乘数)" Grid.Row="2"
+                      ToolTip="净利率 = 净利润 / 营收&#x000a;资产周转率 = 营收 / 总资产&#x000a;权益乘数 = 总资产 / 股东权益&#x000a;ROE = 净利率 × 资产周转率 × 权益乘数">
                 <DataGrid ItemsSource="{Binding DuPontRows}" AutoGenerateColumns="False"
                           IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
                           AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
@@ -69,10 +82,14 @@
                         <DataGridTextColumn Header="营业总收入" Binding="{Binding Revenue, Converter={StaticResource NumConv}}" Width="140"/>
                         <DataGridTextColumn Header="资产总计" Binding="{Binding TotalAssets, Converter={StaticResource NumConv}}" Width="160"/>
                         <DataGridTextColumn Header="股东权益" Binding="{Binding Equity, Converter={StaticResource NumConv}}" Width="160"/>
-                        <DataGridTextColumn Header="净利率" Binding="{Binding NetMargin, Converter={StaticResource PercentConv}}" Width="100"/>
-                        <DataGridTextColumn Header="资产周转率" Binding="{Binding AssetTurnover, Converter={StaticResource PercentConv}}" Width="120"/>
-                        <DataGridTextColumn Header="权益乘数" Binding="{Binding EquityMultiplier, ConverterParameter=2, Converter={StaticResource NumConv}}" Width="100"/>
-                        <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}" Width="100"/>
+                        <DataGridTextColumn Header="净利率" Binding="{Binding NetMargin, Converter={StaticResource PercentConv}}" Width="100"
+                                            HeaderStyle="{StaticResource DupNetMargin}"/>
+                        <DataGridTextColumn Header="资产周转率" Binding="{Binding AssetTurnover, Converter={StaticResource PercentConv}}" Width="120"
+                                            HeaderStyle="{StaticResource DupTurnover}"/>
+                        <DataGridTextColumn Header="权益乘数" Binding="{Binding EquityMultiplier, ConverterParameter=2, Converter={StaticResource NumConv}}" Width="100"
+                                            HeaderStyle="{StaticResource DupEquityMul}"/>
+                        <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}" Width="100"
+                                            HeaderStyle="{StaticResource DupRoe}"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </GroupBox>

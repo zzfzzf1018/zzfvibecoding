@@ -25,25 +25,39 @@ public static class ExportService
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
     }
 
-    /// <summary>导出为 XLSX。</summary>
+    /// <summary>导出为 XLSX。如果对象包含布尔属性 <c>IsHighlighted=true</c>，对应行整体染淡红。</summary>
     public static void ExportExcel<T>(IEnumerable<T> rows, string path, string sheetName = "Sheet1")
     {
         var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var hlProp = props.FirstOrDefault(p => p.Name == "IsHighlighted" && p.PropertyType == typeof(bool));
+        // 输出列跳过 IsHighlighted 自身
+        var outProps = hlProp == null ? props : props.Where(p => p != hlProp).ToArray();
+
         using var wb = new XLWorkbook();
         var ws = wb.AddWorksheet(SafeSheetName(sheetName));
-        for (int c = 0; c < props.Length; c++)
-            ws.Cell(1, c + 1).Value = props[c].Name;
+        for (int c = 0; c < outProps.Length; c++)
+            ws.Cell(1, c + 1).Value = outProps[c].Name;
+        ws.Row(1).Style.Font.Bold = true;
+        ws.Row(1).Style.Fill.BackgroundColor = XLColor.FromArgb(0xEE, 0xEE, 0xEE);
+
         int rowIdx = 2;
         foreach (var r in rows)
         {
-            for (int c = 0; c < props.Length; c++)
+            for (int c = 0; c < outProps.Length; c++)
             {
-                var v = props[c].GetValue(r);
+                var v = outProps[c].GetValue(r);
                 ws.Cell(rowIdx, c + 1).Value = ToCellValue(v);
+            }
+            if (hlProp != null && hlProp.GetValue(r) is bool b && b)
+            {
+                ws.Range(rowIdx, 1, rowIdx, outProps.Length).Style.Fill.BackgroundColor =
+                    XLColor.FromArgb(0xFF, 0xE0, 0xE0);
+                ws.Row(rowIdx).Style.Font.Bold = true;
             }
             rowIdx++;
         }
         ws.Columns().AdjustToContents();
+        ws.SheetView.FreezeRows(1);
         wb.SaveAs(path);
     }
 

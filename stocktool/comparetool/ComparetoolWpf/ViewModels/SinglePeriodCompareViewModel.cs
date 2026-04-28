@@ -17,10 +17,12 @@ namespace ComparetoolWpf.ViewModels;
 public partial class SinglePeriodCompareViewModel : ObservableObject
 {
     private readonly StockDataService _data;
+    private readonly WatchlistService _watch;
 
-    public SinglePeriodCompareViewModel(StockDataService data)
+    public SinglePeriodCompareViewModel(StockDataService data, WatchlistService watch)
     {
         _data = data;
+        _watch = watch;
         ReportKinds = new[] { ReportKind.Balance, ReportKind.Income, ReportKind.CashFlow };
         PeriodTypes = new[]
         {
@@ -82,6 +84,15 @@ public partial class SinglePeriodCompareViewModel : ObservableObject
         }
     }
 
+    /// <summary>全局自选股集合（供下拉选择、跨 Tab 共享）。</summary>
+    public ObservableCollection<StockInfo> Watchlist => _watch.Items;
+
+    [RelayCommand]
+    private void ToggleWatch()
+    {
+        if (SelectedStock != null) _watch.Toggle(SelectedStock);
+    }
+
     #endregion
 
     #region 报表加载
@@ -96,6 +107,9 @@ public partial class SinglePeriodCompareViewModel : ObservableObject
     public ObservableCollection<FinancialReport> LoadedReports { get; } = new();
     [ObservableProperty] private FinancialReport? _baseReport;
     [ObservableProperty] private FinancialReport? _compareReport;
+
+    /// <summary>展示数据来源时间（如 "缓存 2026-04-15 12:34"）。</summary>
+    [ObservableProperty] private string _dataSourceText = string.Empty;
 
     [RelayCommand]
     private async Task LoadReportsAsync()
@@ -116,6 +130,11 @@ public partial class SinglePeriodCompareViewModel : ObservableObject
 
             if (LoadedReports.Count >= 1) CompareReport = LoadedReports[0];
             if (LoadedReports.Count >= 2) BaseReport = LoadedReports[1];
+
+            var fetched = _data.GetLastFetchedAtLocal(SelectedStock.FullCode, SelectedReportKind);
+            DataSourceText = fetched.HasValue
+                ? $"数据时间: {fetched:yyyy-MM-dd HH:mm} ({(DateTime.Now - fetched.Value).TotalDays:F1} 天前)"
+                : string.Empty;
 
             ComparisonRows.Clear();
         }

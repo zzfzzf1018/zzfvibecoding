@@ -18,10 +18,12 @@ namespace ComparetoolWpf.ViewModels;
 public partial class MultiStockCompareViewModel : ObservableObject
 {
     private readonly StockDataService _data;
+    private readonly WatchlistService _watch;
 
-    public MultiStockCompareViewModel(StockDataService data)
+    public MultiStockCompareViewModel(StockDataService data, WatchlistService watch)
     {
         _data = data;
+        _watch = watch;
         ReportKinds = new[] { ReportKind.Balance, ReportKind.Income, ReportKind.CashFlow };
         PeriodTypes = new[]
         {
@@ -94,6 +96,20 @@ public partial class MultiStockCompareViewModel : ObservableObject
     {
         if (SelectedStocksItem is null) return;
         SelectedStocks.Remove(SelectedStocksItem);
+    }
+
+    [RelayCommand]
+    private void ToggleWatch()
+    {
+        if (SearchSelectedStock != null) _watch.Toggle(SearchSelectedStock);
+    }
+
+    [RelayCommand]
+    private void ImportWatchlist()
+    {
+        foreach (var s in _watch.Items)
+            if (!SelectedStocks.Any(x => x.FullCode == s.FullCode))
+                SelectedStocks.Add(s);
     }
 
     #endregion

@@ -15,17 +15,17 @@
                     <StackPanel Orientation="Horizontal" Margin="2">
                         <TextBlock Text="报告期:" Width="80" VerticalAlignment="Center"/>
                         <DatePicker Width="140" SelectedDate="{Binding ReportDateValue}"
-                                    ToolTip="选择报告期。常用：3-31 一季报，6-30 中报，9-30 三季报，12-31 年报。"/>
+                                    ToolTip="选择季报日(自动对齐到 3-31/6-30/9-30/12-31)。"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="2">
                         <TextBlock Text="行业:" Width="60" VerticalAlignment="Center"/>
                         <Button Content="{Binding IndustriesDisplay}" Width="180"
                                 Command="{Binding PickIndustriesCommand}"
-                                ToolTip="点击打开行业多选窗口；可同时勾选多个行业，结果取并集。"/>
+                                ToolTip="点击打开行业多选窗口；可同时勾选多个行业，结果取并集(包含任一关键字即匹配)。"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="2">
                         <TextBlock Text="行业关键字:" Width="100" VerticalAlignment="Center"
-                                   ToolTip="附加单关键字模糊匹配（与多选条件叠加生效）。"/>
+                                   ToolTip="附加单关键字模糊匹配（与多选条件并用，AND 关系）。"/>
                         <TextBox Width="120" Text="{Binding IndustryContains, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="2">
@@ -59,8 +59,27 @@
                         <TextBlock Text="(×200 只)" Margin="6,0,0,0" VerticalAlignment="Center" Foreground="#888"/>
                     </StackPanel>
                 </UniformGrid>
+
+                <!-- 估值过滤行 -->
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <CheckBox Content="启用估值过滤(PE/PB/PS/股息率)" IsChecked="{Binding IncludeValuation}"
+                              ToolTip="勾选后将额外查询 RPT_VALUEANALYSIS_DET 接口补充估值列。会变慢。"
+                              VerticalAlignment="Center"/>
+                    <TextBlock Text="    PE ≤" Margin="10,0,4,0" VerticalAlignment="Center"/>
+                    <TextBox Width="60" Text="{Binding PeMax, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="    PB ≤" Margin="10,0,4,0" VerticalAlignment="Center"/>
+                    <TextBox Width="60" Text="{Binding PbMax, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="    PS ≤" Margin="10,0,4,0" VerticalAlignment="Center"/>
+                    <TextBox Width="60" Text="{Binding PsMax, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="    股息率(%) ≥" Margin="10,0,4,0" VerticalAlignment="Center"/>
+                    <TextBox Width="60" Text="{Binding DividendYieldMin, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                     <Button Content="开始筛选" Padding="20,4" Command="{Binding ScreenCommand}" />
+                    <Button Content="★ 加入自选" Margin="10,0,0,0" Padding="14,4"
+                            Command="{Binding AddSelectedToWatchlistCommand}"
+                            ToolTip="把当前选中行加入自选股(跨 Tab 共享)"/>
                     <Button Content="导出..." Margin="10,0,0,0" Padding="14,4" Command="{Binding ExportCommand}" />
                     <TextBlock Text="{Binding StatusText}" Margin="20,0,0,0" VerticalAlignment="Center"
                                Foreground="#555" />
@@ -68,21 +87,41 @@
             </StackPanel>
         </Border>
 
-        <DataGrid ItemsSource="{Binding Results}" AutoGenerateColumns="False"
-                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column"
-                  AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
+        <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedRow}"
+                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                  CanUserSortColumns="True" HeadersVisibility="Column"
+                  AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8"
+                  ToolTip="表头点击可排序；Ctrl+C 复制选中区域。">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="代码" Binding="{Binding Code}" Width="80"/>
-                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
-                <DataGridTextColumn Header="行业" Binding="{Binding Industry}" Width="120"/>
-                <DataGridTextColumn Header="EPS" Binding="{Binding Eps, Converter={StaticResource NumConv}}" Width="80"/>
-                <DataGridTextColumn Header="营收" Binding="{Binding Revenue, Converter={StaticResource NumConv}}" Width="140"/>
-                <DataGridTextColumn Header="净利润" Binding="{Binding NetProfit, Converter={StaticResource NumConv}}" Width="140"/>
-                <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}" Width="80"/>
-                <DataGridTextColumn Header="毛利率" Binding="{Binding GrossMargin, Converter={StaticResource PercentConv}}" Width="80"/>
-                <DataGridTextColumn Header="净利率" Binding="{Binding NetMargin, Converter={StaticResource PercentConv}}" Width="80"/>
-                <DataGridTextColumn Header="营收同比" Binding="{Binding RevenueYoY, Converter={StaticResource PercentConv}}" Width="100"/>
-                <DataGridTextColumn Header="净利同比" Binding="{Binding NetProfitYoY, Converter={StaticResource PercentConv}}" Width="100"/>
+                <DataGridTextColumn Header="代码" Binding="{Binding Code}" Width="80" SortMemberPath="Code"/>
+                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120" SortMemberPath="Name"/>
+                <DataGridTextColumn Header="行业" Binding="{Binding Industry}" Width="120" SortMemberPath="Industry"/>
+                <DataGridTextColumn Header="EPS" Binding="{Binding Eps, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="Eps" Width="80"/>
+                <DataGridTextColumn Header="营收" Binding="{Binding Revenue, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="Revenue" Width="140"/>
+                <DataGridTextColumn Header="净利润" Binding="{Binding NetProfit, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="NetProfit" Width="140"/>
+                <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}"
+                                    SortMemberPath="Roe" Width="80"/>
+                <DataGridTextColumn Header="毛利率" Binding="{Binding GrossMargin, Converter={StaticResource PercentConv}}"
+                                    SortMemberPath="GrossMargin" Width="80"/>
+                <DataGridTextColumn Header="净利率" Binding="{Binding NetMargin, Converter={StaticResource PercentConv}}"
+                                    SortMemberPath="NetMargin" Width="80"/>
+                <DataGridTextColumn Header="营收同比" Binding="{Binding RevenueYoY, Converter={StaticResource PercentConv}}"
+                                    SortMemberPath="RevenueYoY" Width="100"/>
+                <DataGridTextColumn Header="净利同比" Binding="{Binding NetProfitYoY, Converter={StaticResource PercentConv}}"
+                                    SortMemberPath="NetProfitYoY" Width="100"/>
+                <DataGridTextColumn Header="PE" Binding="{Binding PE, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="PE" Width="80"/>
+                <DataGridTextColumn Header="PB" Binding="{Binding PB, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="PB" Width="70"/>
+                <DataGridTextColumn Header="PS" Binding="{Binding PS, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="PS" Width="70"/>
+                <DataGridTextColumn Header="股息率(%)" Binding="{Binding DividendYield, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="DividendYield" Width="80"/>
+                <DataGridTextColumn Header="总市值" Binding="{Binding TotalMarketCap, Converter={StaticResource NumConv}}"
+                                    SortMemberPath="TotalMarketCap" Width="160"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>
