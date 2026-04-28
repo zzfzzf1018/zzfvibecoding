@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ComparetoolWpf.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Newtonsoft.Json：解析东方财富返回的 JSON（动态字段较多，比 System.Text.Json 灵活） -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <!-- CommunityToolkit.Mvvm：提供 ObservableObject / RelayCommand，简化 MVVM -->

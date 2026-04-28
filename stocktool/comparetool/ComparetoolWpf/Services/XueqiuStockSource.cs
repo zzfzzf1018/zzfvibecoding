@@ -26,15 +26,19 @@ public class XueqiuStockSource : IStockDataSource
 
     public string Name => "雪球";
 
-    public XueqiuStockSource()
+    public XueqiuStockSource() : this(null) { }
+
+    internal XueqiuStockSource(HttpMessageHandler? handler)
     {
-        _handler = new HttpClientHandler
+        _handler = handler as HttpClientHandler ?? new HttpClientHandler
         {
             CookieContainer = new CookieContainer(),
             UseCookies = true,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
         };
-        _http = new HttpClient(_handler) { Timeout = TimeSpan.FromSeconds(20) };
+        _http = handler == null
+            ? new HttpClient(_handler) { Timeout = TimeSpan.FromSeconds(20) }
+            : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ComparetoolWpf/1.0");
         _http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/plain, */*");

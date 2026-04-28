@@ -27,12 +27,14 @@ public class EastMoneyService : IStockDataSource
 
     public string Name => "东方财富";
 
-    public EastMoneyService()
+    public EastMoneyService() : this(null) { }
+
+    /// <summary>测试专用构造函数：可注入 <see cref="HttpMessageHandler"/>。</summary>
+    internal EastMoneyService(HttpMessageHandler? handler)
     {
-        _http = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(20),
-        };
+        _http = handler == null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(20) }
+            : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
         // 东方财富部分接口对 UA 有简单校验
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ComparetoolWpf/1.0");

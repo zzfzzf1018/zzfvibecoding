@@ -28,9 +28,13 @@ public class ScreenerService
 {
     private readonly HttpClient _http;
 
-    public ScreenerService()
+    public ScreenerService() : this(null) { }
+
+    internal ScreenerService(HttpMessageHandler? handler)
     {
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = handler == null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(30) }
+            : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ComparetoolWpf/1.0");
         _http.DefaultRequestHeaders.Referrer = new Uri("https://data.eastmoney.com/");

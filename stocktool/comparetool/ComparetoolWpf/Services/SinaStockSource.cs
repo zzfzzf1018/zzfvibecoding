@@ -22,9 +22,13 @@ public class SinaStockSource : IStockDataSource
 
     public string Name => "新浪财经";
 
-    public SinaStockSource()
+    public SinaStockSource() : this(null) { }
+
+    internal SinaStockSource(HttpMessageHandler? handler)
     {
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        _http = handler == null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(15) }
+            : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ComparetoolWpf/1.0");
         _http.DefaultRequestHeaders.Referrer = new Uri("https://finance.sina.com.cn/");
