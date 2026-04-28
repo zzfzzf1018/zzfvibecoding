@@ -9,13 +9,16 @@
         <vm:MainViewModel />
     </Window.DataContext>
     <TabControl>
+        <TabItem Header="选股器">
+            <views:ScreenerView DataContext="{Binding ScreenerVm}" />
+        </TabItem>
         <TabItem Header="单股期间对比">
             <views:SinglePeriodCompareView DataContext="{Binding SingleVm}" />
         </TabItem>
         <TabItem Header="多股横向对比（百分比报表）">
             <views:MultiStockCompareView DataContext="{Binding MultiVm}" />
         </TabItem>
-        <TabItem Header="同比/环比/杜邦分析">
+        <TabItem Header="同比/环比/杜邦/现金质量">
             <views:MetricsView DataContext="{Binding MetricsVm}" />
         </TabItem>
         <TabItem Header="趋势图">

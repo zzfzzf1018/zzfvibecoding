@@ -10,6 +10,7 @@ public partial class MainViewModel : ObservableObject
     public MultiStockCompareViewModel MultiVm { get; }
     public MetricsViewModel MetricsVm { get; }
     public TrendChartViewModel TrendVm { get; }
+    public ScreenerViewModel ScreenerVm { get; }
 
     public MainViewModel()
     {
@@ -21,5 +22,6 @@ public partial class MainViewModel : ObservableObject
         MultiVm = new MultiStockCompareViewModel(data);
         MetricsVm = new MetricsViewModel(data);
         TrendVm = new TrendChartViewModel(data);
+        ScreenerVm = new ScreenerViewModel(new ScreenerService());
     }
 }

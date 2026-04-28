@@ -111,4 +111,84 @@ public static class MetricsService
         if (Math.Abs(b.Value) < 1e-9) return null;
         return a.Value / b.Value;
     }
+
+    /// <summary>
+    /// 营运资本变化 / 自由现金流 / 现金转换周期。
+    /// 需要三表齐全；按报告期对齐。
+    /// 注意：DSO/DIO/DPO 按 365 天年化；半年/季度报表上仅作大致参考。
+    /// </summary>
+    public static List<CashQualityRow> ComputeCashQuality(
+        IEnumerable<FinancialReport> balances,
+        IEnumerable<FinancialReport> incomes,
+        IEnumerable<FinancialReport> cashFlows)
+    {
+        var balDict = balances.ToDictionary(b => b.ReportDate, b => b);
+        var incDict = incomes.ToDictionary(i => i.ReportDate, i => i);
+        var cfDict = cashFlows.ToDictionary(c => c.ReportDate, c => c);
+
+        var dates = balDict.Keys.OrderBy(d => d).ToList();
+        var rows = new List<CashQualityRow>();
+        for (int i = 0; i < dates.Count; i++)
+        {
+            var date = dates[i];
+            balDict.TryGetValue(date, out var bal);
+            incDict.TryGetValue(date, out var inc);
+            cfDict.TryGetValue(date, out var cf);
+            if (bal == null) continue;
+
+            // 营运资本
+            bal.Items.TryGetValue("流动资产合计", out var ca);
+            bal.Items.TryGetValue("流动负债合计", out var cl);
+            double? wc = (ca.HasValue && cl.HasValue) ? ca - cl : null;
+
+            double? wcChange = null;
+            if (i > 0 && balDict.TryGetValue(dates[i - 1], out var prevBal))
+            {
+                prevBal.Items.TryGetValue("流动资产合计", out var pca);
+                prevBal.Items.TryGetValue("流动负债合计", out var pcl);
+                double? prevWc = (pca.HasValue && pcl.HasValue) ? pca - pcl : null;
+                if (wc.HasValue && prevWc.HasValue) wcChange = wc - prevWc;
+            }
+
+            // 现金流
+            double? ocf = null, capex = null;
+            if (cf != null)
+            {
+                cf.Items.TryGetValue("经营活动产生的现金流量净额", out ocf);
+                // 这里用“投资活动现金流出小计”作为 Capex 的近似
+                cf.Items.TryGetValue("投资活动现金流出小计", out capex);
+            }
+            double? fcf = (ocf.HasValue && capex.HasValue) ? ocf - Math.Abs(capex.Value) : null;
+
+            // CCC：需要营收 / 营业成本 / 应收 / 存货 / 应付
+            double? rev = null, cost = null, ar = null, inv = null, ap = null;
+            inc?.Items.TryGetValue("营业总收入", out rev);
+            inc?.Items.TryGetValue("营业成本", out cost);
+            bal.Items.TryGetValue("应收账款", out ar);
+            bal.Items.TryGetValue("存货", out inv);
+            bal.Items.TryGetValue("应付票据及应付账款", out ap);
+
+            double? dso = (ar.HasValue && rev.HasValue && rev.Value > 0) ? ar / rev * 365 : null;
+            double? dio = (inv.HasValue && cost.HasValue && cost.Value > 0) ? inv / cost * 365 : null;
+            double? dpo = (ap.HasValue && cost.HasValue && cost.Value > 0) ? ap / cost * 365 : null;
+            double? ccc = (dso.HasValue && dio.HasValue && dpo.HasValue) ? dso + dio - dpo : null;
+
+            rows.Add(new CashQualityRow
+            {
+                ReportDate = date,
+                PeriodLabel = bal.PeriodLabel,
+                WorkingCapital = wc,
+                WorkingCapitalChange = wcChange,
+                OperatingCashFlow = ocf,
+                Capex = capex,
+                FreeCashFlow = fcf,
+                DSO = dso,
+                DIO = dio,
+                DPO = dpo,
+                CCC = ccc,
+            });
+        }
+        rows.Reverse();
+        return rows;
+    }
 }

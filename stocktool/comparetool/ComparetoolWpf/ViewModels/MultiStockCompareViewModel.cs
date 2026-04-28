@@ -40,6 +40,27 @@ public partial class MultiStockCompareViewModel : ObservableObject
     public ObservableCollection<StockInfo> SearchResults { get; } = new();
     [ObservableProperty] private StockInfo? _searchSelectedStock;
 
+    private int _searchToken;
+    partial void OnSearchKeywordChanged(string value)
+    {
+        if (SearchSelectedStock != null && value == SearchSelectedStock.ToString()) return;
+        var token = System.Threading.Interlocked.Increment(ref _searchToken);
+        _ = AutoSearchAsync(value, token);
+    }
+    private async Task AutoSearchAsync(string text, int token)
+    {
+        try
+        {
+            await Task.Delay(300);
+            if (token != _searchToken || string.IsNullOrWhiteSpace(text)) return;
+            var list = await _data.SearchStocksAsync(text);
+            if (token != _searchToken) return;
+            SearchResults.Clear();
+            foreach (var s in list) SearchResults.Add(s);
+        }
+        catch { }
+    }
+
     /// <summary>已加入对比的股票池。</summary>
     public ObservableCollection<StockInfo> SelectedStocks { get; } = new();
     [ObservableProperty] private StockInfo? _selectedStocksItem;

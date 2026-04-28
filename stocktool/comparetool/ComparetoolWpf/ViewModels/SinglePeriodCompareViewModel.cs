@@ -38,6 +38,34 @@ public partial class SinglePeriodCompareViewModel : ObservableObject
     public ObservableCollection<StockInfo> SearchResults { get; } = new();
     [ObservableProperty] private StockInfo? _selectedStock;
 
+    // 输入防抖：每次输入推进 token，到时如未被替换则触发搜索
+    private int _searchToken;
+
+    partial void OnSearchKeywordChanged(string value)
+    {
+        // 如果当前文本恰好是 SelectedStock.ToString()，说明是用户从下拉中选中的，
+        // 不再触发新的联想搜索，避免回环。
+        if (SelectedStock != null && value == SelectedStock.ToString()) return;
+
+        var token = System.Threading.Interlocked.Increment(ref _searchToken);
+        AutoSearchAsync(value, token);
+    }
+
+    private async void AutoSearchAsync(string text, int token)
+    {
+        try
+        {
+            await Task.Delay(300); // 300ms 防抖
+            if (token != _searchToken) return; // 期间又有输入，放弃本次
+            if (string.IsNullOrWhiteSpace(text)) return;
+            var list = await _data.SearchStocksAsync(text);
+            if (token != _searchToken) return;
+            SearchResults.Clear();
+            foreach (var s in list) SearchResults.Add(s);
+        }
+        catch { /* 联想搜索静默失败 */ }
+    }
+
     [RelayCommand]
     private async Task SearchAsync()
     {

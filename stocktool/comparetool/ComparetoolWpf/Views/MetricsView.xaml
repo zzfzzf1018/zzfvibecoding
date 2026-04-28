@@ -13,9 +13,12 @@
             <StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="股票:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <TextBox Width="180" Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}" />
+                    <ComboBox Width="260" IsEditable="True" StaysOpenOnEdit="True"
+                              Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}"
+                              ItemsSource="{Binding SearchResults}"
+                              SelectedItem="{Binding SelectedStock}"
+                              IsTextSearchEnabled="False" />
                     <Button Content="搜索" Margin="6,0" Padding="10,2" Command="{Binding SearchCommand}" />
-                    <ComboBox Width="220" ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedStock}" />
                     <TextBlock Text="    报告期:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                     <ComboBox Width="100" ItemsSource="{Binding PeriodTypes}" SelectedItem="{Binding SelectedPeriodType}" />
                     <Button Content="加载并分析" Margin="10,0,0,0" Padding="14,4" Command="{Binding LoadAndAnalyzeCommand}" />
@@ -25,13 +28,16 @@
                     <ComboBox Width="280" ItemsSource="{Binding AllMetrics}" SelectedItem="{Binding SelectedMetric}" />
                     <Button Content="导出同比环比..." Margin="10,0,0,0" Padding="10,2" Command="{Binding ExportGrowthCommand}" />
                     <Button Content="导出杜邦..." Margin="10,0,0,0" Padding="10,2" Command="{Binding ExportDuPontCommand}" />
+                    <Button Content="导出现金质量..." Margin="10,0,0,0" Padding="10,2" Command="{Binding ExportCashQualityCommand}" />
                 </StackPanel>
             </StackPanel>
         </Border>
 
-        <!-- 主体：上下两个 DataGrid -->
+        <!-- 主体：上中下三个 DataGrid -->
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="6"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="6"/>
                 <RowDefinition Height="*"/>
@@ -68,6 +74,27 @@
                         <DataGridTextColumn Header="资产周转率" Binding="{Binding AssetTurnover, Converter={StaticResource PercentConv}}" Width="120"/>
                         <DataGridTextColumn Header="权益乘数" Binding="{Binding EquityMultiplier, ConverterParameter=2, Converter={StaticResource NumConv}}" Width="100"/>
                         <DataGridTextColumn Header="ROE" Binding="{Binding Roe, Converter={StaticResource PercentConv}}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch" Background="#EEE"/>
+
+            <GroupBox Header="现金质量与营运能力 (营运资本变化 / FCF / CCC)" Grid.Row="4">
+                <DataGrid ItemsSource="{Binding CashQualityRows}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                          AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F8F8F8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="报告期" Binding="{Binding PeriodLabel}" Width="110"/>
+                        <DataGridTextColumn Header="营运资本" Binding="{Binding WorkingCapital, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="营运资本变化" Binding="{Binding WorkingCapitalChange, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="经营现金流" Binding="{Binding OperatingCashFlow, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="资本开支" Binding="{Binding Capex, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="自由现金流" Binding="{Binding FreeCashFlow, Converter={StaticResource NumConv}}" Width="140"/>
+                        <DataGridTextColumn Header="DSO(天)" Binding="{Binding DSO, ConverterParameter=1, Converter={StaticResource NumConv}}" Width="80"/>
+                        <DataGridTextColumn Header="DIO(天)" Binding="{Binding DIO, ConverterParameter=1, Converter={StaticResource NumConv}}" Width="80"/>
+                        <DataGridTextColumn Header="DPO(天)" Binding="{Binding DPO, ConverterParameter=1, Converter={StaticResource NumConv}}" Width="80"/>
+                        <DataGridTextColumn Header="CCC(天)" Binding="{Binding CCC, ConverterParameter=1, Converter={StaticResource NumConv}}" Width="80"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </GroupBox>

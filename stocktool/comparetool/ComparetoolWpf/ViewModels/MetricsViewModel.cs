@@ -33,6 +33,27 @@ public partial class MetricsViewModel : ObservableObject
     public ObservableCollection<StockInfo> SearchResults { get; } = new();
     [ObservableProperty] private StockInfo? _selectedStock;
 
+    private int _searchToken;
+    partial void OnSearchKeywordChanged(string value)
+    {
+        if (SelectedStock != null && value == SelectedStock.ToString()) return;
+        var token = System.Threading.Interlocked.Increment(ref _searchToken);
+        _ = AutoSearchAsync(value, token);
+    }
+    private async Task AutoSearchAsync(string text, int token)
+    {
+        try
+        {
+            await Task.Delay(300);
+            if (token != _searchToken || string.IsNullOrWhiteSpace(text)) return;
+            var list = await _data.SearchStocksAsync(text);
+            if (token != _searchToken) return;
+            SearchResults.Clear();
+            foreach (var s in list) SearchResults.Add(s);
+        }
+        catch { }
+    }
+
     public IReadOnlyList<ReportPeriodType> PeriodTypes { get; }
     [ObservableProperty] private ReportPeriodType _selectedPeriodType;
 
@@ -42,6 +63,7 @@ public partial class MetricsViewModel : ObservableObject
 
     public ObservableCollection<GrowthRow> GrowthRows { get; } = new();
     public ObservableCollection<DuPontRow> DuPontRows { get; } = new();
+    public ObservableCollection<CashQualityRow> CashQualityRows { get; } = new();
 
     private List<FinancialReport> _balances = new();
     private List<FinancialReport> _incomes = new();
@@ -91,6 +113,11 @@ public partial class MetricsViewModel : ObservableObject
             DuPontRows.Clear();
             foreach (var d in MetricsService.ComputeDuPont(_balances, _incomes))
                 DuPontRows.Add(d);
+
+            // 计算 现金质量 / 营运资本变化 / FCF / CCC
+            CashQualityRows.Clear();
+            foreach (var c in MetricsService.ComputeCashQuality(_balances, _incomes, _cashFlows))
+                CashQualityRows.Add(c);
 
             ComputeGrowthInternal();
         }
@@ -154,5 +181,25 @@ public partial class MetricsViewModel : ObservableObject
             ExportService.ExportCsv(GrowthRows, dlg.FileName);
         else
             ExportService.ExportExcel(GrowthRows, dlg.FileName, "Growth");
+    }
+
+    [RelayCommand]
+    private void ExportCashQuality()
+    {
+        if (CashQualityRows.Count == 0)
+        {
+            MessageBox.Show("没有可导出的现金质量数据。", "提示");
+            return;
+        }
+        var dlg = new SaveFileDialog
+        {
+            Filter = "Excel 文件 (*.xlsx)|*.xlsx|CSV 文件 (*.csv)|*.csv",
+            FileName = $"{SelectedStock?.Name}_现金质量与营运能力.xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+        if (dlg.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            ExportService.ExportCsv(CashQualityRows, dlg.FileName);
+        else
+            ExportService.ExportExcel(CashQualityRows, dlg.FileName, "CashQuality");
     }
 }

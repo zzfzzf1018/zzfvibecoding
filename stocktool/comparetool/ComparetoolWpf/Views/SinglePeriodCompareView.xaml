@@ -16,9 +16,13 @@
             <StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="股票:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <TextBox Width="180" Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}" />
+                    <!-- 可编辑下拉：输入即触发联想，下拉显示候选；选中后填入 SelectedStock -->
+                    <ComboBox Width="260" IsEditable="True" StaysOpenOnEdit="True"
+                              Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}"
+                              ItemsSource="{Binding SearchResults}"
+                              SelectedItem="{Binding SelectedStock}"
+                              IsTextSearchEnabled="False" />
                     <Button Content="搜索" Margin="6,0" Padding="10,2" Command="{Binding SearchCommand}" />
-                    <ComboBox Width="220" ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedStock}" />
                     <TextBlock Text="    报表:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                     <ComboBox Width="120" ItemsSource="{Binding ReportKinds}" SelectedItem="{Binding SelectedReportKind}" />
                     <TextBlock Text="    报告期:" VerticalAlignment="Center" Margin="10,0,4,0"/>
