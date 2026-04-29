@@ -209,6 +209,13 @@ internal sealed class MainForm : Form
         _plotPrice.MouseMove += OnPriceMouseMove;
         _plotPrice.MouseLeave += (_, _) => HideCrosshair();
 
+        // 禁用 K 线相关 4 个图的缩放/拖拽，避免错位（画图工具自己也依赖此状态）
+        DisableInteraction(_plotPrice);
+        DisableInteraction(_plotVolume);
+        DisableInteraction(_plotMacd);
+        DisableInteraction(_plotKdj);
+        DisableInteraction(_plotChip);
+
         Load += (_, _) =>
         {
             splitMain.SplitterDistance = 200;
@@ -766,6 +773,49 @@ internal sealed class MainForm : Form
         if (_crosshair != null) _crosshair.IsVisible = false;
         if (_hoverNote != null) _hoverNote.IsVisible = false;
         _plotPrice.Refresh();
+    }
+
+    // ============================================================
+    // 多图 X 轴联动（缩放/平移其中一个，其他三个跟随）
+    // ============================================================
+    private bool _syncing;
+    private void WireAxisSync()
+    {
+        var plots = new[] { _plotPrice, _plotVolume, _plotMacd, _plotKdj };
+        foreach (var fp in plots)
+        {
+            fp.MouseUp += (_, _) => SyncFrom(fp);
+            fp.MouseWheel += (_, _) => SyncFrom(fp);
+            fp.MouseMove += (_, e) =>
+            {
+                if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Middle || e.Button == MouseButtons.Right)
+                    SyncFrom(fp);
+            };
+            fp.DoubleClick += (_, _) => SyncFrom(fp);
+        }
+    }
+
+    private void SyncFrom(FormsPlot src)
+    {
+        if (_syncing) return;
+        _syncing = true;
+        try
+        {
+            var x = src.Plot.Axes.GetLimits().HorizontalRange;
+            foreach (var fp in new[] { _plotPrice, _plotVolume, _plotMacd, _plotKdj })
+            {
+                if (ReferenceEquals(fp, src)) continue;
+                fp.Plot.Axes.SetLimitsX(x.Min, x.Max);
+                fp.Refresh();
+            }
+        }
+        finally { _syncing = false; }
+    }
+
+    /// <summary>关闭某个 FormsPlot 的所有内置鼠标交互（缩放/拖拽/双击重置）。</summary>
+    private static void DisableInteraction(FormsPlot fp)
+    {
+        fp.UserInputProcessor.Disable();
     }
 
     // ============================================================

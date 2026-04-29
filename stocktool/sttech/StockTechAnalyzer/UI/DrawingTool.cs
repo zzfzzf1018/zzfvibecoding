@@ -30,6 +30,8 @@ internal sealed class DrawingTool
         _firstPoint = null;
         ClearPreview();
         _fp.Cursor = m == Mode.None ? Cursors.Default : Cursors.Cross;
+
+        // 主图已经全程禁用了 ScottPlot 默认的鼠标交互，这里无需再切换。
     }
 
     public void ClearAll()
