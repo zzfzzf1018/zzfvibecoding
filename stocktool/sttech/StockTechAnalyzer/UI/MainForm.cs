@@ -32,7 +32,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _txtSearch;
     private readonly ListBox _lstSearch;
     private readonly ListBox _lstWatch;
-    private readonly Button _btnAddWatch, _btnRemoveWatch, _btnRefresh, _btnSettings, _btnExport;
+    private readonly Button _btnAddWatch, _btnRemoveWatch, _btnRefresh, _btnSettings, _btnExport, _btnTools, _btnDraw;
     private readonly ComboBox _cboPeriod;
     private readonly NumericUpDown _numCount;
     private readonly Label _lblHeader;
@@ -50,6 +50,9 @@ internal sealed class MainForm : Form
     // 十字光标
     private ScottPlot.Plottables.Crosshair? _crosshair;
     private ScottPlot.Plottables.Annotation? _hoverNote;
+
+    // 画图工具
+    private DrawingTool? _drawingTool;
 
     public MainForm()
     {
@@ -95,12 +98,18 @@ internal sealed class MainForm : Form
         _btnExport = new Button { Text = "导出 ▾", Left = 646, Top = 11, Width = 70 };
         _btnExport.Click += (_, _) => ShowExportMenu();
 
-        _btnSettings = new Button { Text = "设置", Left = 722, Top = 11, Width = 60 };
+        _btnDraw = new Button { Text = "画图 ▾", Left = 722, Top = 11, Width = 70 };
+        _btnDraw.Click += (_, _) => ShowDrawMenu();
+
+        _btnTools = new Button { Text = "工具 ▾", Left = 798, Top = 11, Width = 70 };
+        _btnTools.Click += (_, _) => ShowToolsMenu();
+
+        _btnSettings = new Button { Text = "设置", Left = 874, Top = 11, Width = 60 };
         _btnSettings.Click += (_, _) => OpenSettings();
 
         _lblHeader = new Label
         {
-            Left = 800, Top = 8, Width = 660, Height = 36,
+            Left = 950, Top = 8, Width = 510, Height = 36,
             Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
             Text = "请选择股票",
@@ -109,7 +118,7 @@ internal sealed class MainForm : Form
         tool.Controls.AddRange(new Control[]
         {
             _txtSearch, btnSearch, lblP, _cboPeriod, lblN, _numCount,
-            _btnRefresh, _btnExport, _btnSettings, _lblHeader,
+            _btnRefresh, _btnExport, _btnDraw, _btnTools, _btnSettings, _lblHeader,
         });
 
         // ---- 左侧：搜索结果 + 自选 ----
@@ -873,5 +882,72 @@ internal sealed class MainForm : Form
         sb.AppendLine("> ⚠️ 本报告仅供学习研究，不构成任何投资建议。");
         File.WriteAllText(sfd.FileName, sb.ToString(), new UTF8Encoding(true));
         MessageBox.Show(this, "已导出：" + sfd.FileName, "导出完成");
+    }
+
+    // ============================================================
+    // 画图工具菜单
+    // ============================================================
+    private void ShowDrawMenu()
+    {
+        EnsureDrawingTool();
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("无 (浏览模式)", null, (_, _) => _drawingTool!.SetMode(DrawingTool.Mode.None));
+        menu.Items.Add("趋势线", null, (_, _) => _drawingTool!.SetMode(DrawingTool.Mode.Trendline));
+        menu.Items.Add("水平价位线", null, (_, _) => _drawingTool!.SetMode(DrawingTool.Mode.Horizontal));
+        menu.Items.Add("斐波那契回撤", null, (_, _) => _drawingTool!.SetMode(DrawingTool.Mode.Fibonacci));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("清除全部", null, (_, _) => { _drawingTool!.ClearAll(); _plotPrice.Refresh(); });
+        menu.Show(_btnDraw, new Point(0, _btnDraw.Height));
+    }
+
+    private void EnsureDrawingTool()
+    {
+        if (_drawingTool == null) _drawingTool = new DrawingTool(_plotPrice);
+    }
+
+    // ============================================================
+    // 工具菜单
+    // ============================================================
+    private void ShowToolsMenu()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("分时图...", null, (_, _) => OpenMinute());
+        menu.Items.Add("多周期对比...", null, (_, _) => OpenMultiPeriod());
+        menu.Items.Add("个股 / 大盘对比...", null, (_, _) => OpenCompare());
+        menu.Items.Add("策略回测...", null, (_, _) => OpenBacktest());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("自选股看板...", null, (_, _) => new WatchlistDashboardForm(
+            _settings.Watchlist, _dataSource, _sina, _theme, async s =>
+            {
+                _currentStock = s;
+                await ReloadAsync();
+            }).Show(this));
+        menu.Items.Add("市场宽度 (龙虎榜/北向/板块)...", null, (_, _) => new MarketBoardForm(_theme).Show(this));
+        menu.Show(_btnTools, new Point(0, _btnTools.Height));
+    }
+
+    private void OpenMinute()
+    {
+        if (_currentStock == null) { MessageBox.Show(this, "请先选择股票", "提示"); return; }
+        new MinuteForm(_currentStock, _theme).Show(this);
+    }
+
+    private void OpenMultiPeriod()
+    {
+        if (_currentStock == null) { MessageBox.Show(this, "请先选择股票", "提示"); return; }
+        new MultiPeriodForm(_currentStock, _dataSource, _theme).Show(this);
+    }
+
+    private void OpenCompare()
+    {
+        string? def = _currentStock != null ? $"sh000001,{_currentStock.FullCode}" : null;
+        new CompareForm(_dataSource, _sina, _theme, def).Show(this);
+    }
+
+    private void OpenBacktest()
+    {
+        if (_currentStock == null || _currentBars.Count < 60)
+        { MessageBox.Show(this, "请先加载至少 60 根 K 线", "提示"); return; }
+        new BacktestForm(_currentStock, _currentBars, _theme).Show(this);
     }
 }
