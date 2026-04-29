@@ -8,8 +8,10 @@ namespace StockTechAnalyzer.Storage;
 /// </summary>
 public sealed class AppSettings
 {
-    public string DataSource { get; set; } = "Sina"; // Sina / Tushare
+    public string DataSource { get; set; } = "Sina"; // Sina / EastMoney / Tushare
     public string TushareToken { get; set; } = "";
+    public bool DarkMode { get; set; } = false;
+    public bool EnableCache { get; set; } = true;
     public List<StockInfo> Watchlist { get; set; } = new();
 
     private static string FilePath

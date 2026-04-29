@@ -1,4 +1,5 @@
-using System.ComponentModel;
+using System.Globalization;
+using System.Text;
 using ScottPlot;
 using ScottPlot.WinForms;
 using StockTechAnalyzer.Analysis;
@@ -19,27 +20,36 @@ internal sealed class MainForm : Form
     private AppSettings _settings;
     private IStockDataSource _dataSource = null!;
     private readonly SinaStockDataSource _sina = new();
+    private readonly EastMoneyExtras _emExtras = new();
+    private readonly KlineCache _cache = new();
 
     private StockInfo? _currentStock;
     private IReadOnlyList<Kline> _currentBars = Array.Empty<Kline>();
     private CancellationTokenSource? _loadCts;
+    private Themes.ThemeColors _theme = Themes.Light;
 
     // ---------------- 控件 ----------------
     private readonly TextBox _txtSearch;
     private readonly ListBox _lstSearch;
     private readonly ListBox _lstWatch;
-    private readonly Button _btnAddWatch, _btnRemoveWatch, _btnRefresh, _btnSettings;
+    private readonly Button _btnAddWatch, _btnRemoveWatch, _btnRefresh, _btnSettings, _btnExport;
     private readonly ComboBox _cboPeriod;
     private readonly NumericUpDown _numCount;
     private readonly Label _lblHeader;
     private readonly TextBox _txtReport;
     private readonly TextBox _txtExplain;
+    private readonly TextBox _txtFundFlow;
+    private readonly TextBox _txtRisk;
 
     private readonly FormsPlot _plotPrice = new() { Dock = DockStyle.Fill };
     private readonly FormsPlot _plotVolume = new() { Dock = DockStyle.Fill };
     private readonly FormsPlot _plotMacd = new() { Dock = DockStyle.Fill };
     private readonly FormsPlot _plotKdj = new() { Dock = DockStyle.Fill };
     private readonly FormsPlot _plotChip = new() { Dock = DockStyle.Fill };
+
+    // 十字光标
+    private ScottPlot.Plottables.Crosshair? _crosshair;
+    private ScottPlot.Plottables.Annotation? _hoverNote;
 
     public MainForm()
     {
@@ -79,15 +89,18 @@ internal sealed class MainForm : Form
             Minimum = 30, Maximum = 1000, Value = 250, Increment = 10,
         };
 
-        _btnRefresh = new Button { Text = "刷新", Left = 580, Top = 11, Width = 70 };
+        _btnRefresh = new Button { Text = "刷新", Left = 580, Top = 11, Width = 60 };
         _btnRefresh.Click += async (_, _) => await ReloadAsync();
 
-        _btnSettings = new Button { Text = "设置", Left = 656, Top = 11, Width = 70 };
+        _btnExport = new Button { Text = "导出 ▾", Left = 646, Top = 11, Width = 70 };
+        _btnExport.Click += (_, _) => ShowExportMenu();
+
+        _btnSettings = new Button { Text = "设置", Left = 722, Top = 11, Width = 60 };
         _btnSettings.Click += (_, _) => OpenSettings();
 
         _lblHeader = new Label
         {
-            Left = 740, Top = 8, Width = 700, Height = 36,
+            Left = 800, Top = 8, Width = 660, Height = 36,
             Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
             Text = "请选择股票",
@@ -96,7 +109,7 @@ internal sealed class MainForm : Form
         tool.Controls.AddRange(new Control[]
         {
             _txtSearch, btnSearch, lblP, _cboPeriod, lblN, _numCount,
-            _btnRefresh, _btnSettings, _lblHeader,
+            _btnRefresh, _btnExport, _btnSettings, _lblHeader,
         });
 
         // ---- 左侧：搜索结果 + 自选 ----
@@ -152,29 +165,18 @@ internal sealed class MainForm : Form
 
         tabs.TabPages.AddRange(new[] { pgKline, pgChip });
 
-        // ---- 右侧：分析报告（综合 / 小白解读 双标签）----
-        _txtReport = new TextBox
-        {
-            Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
-            ScrollBars = ScrollBars.Vertical, WordWrap = true,
-            Font = new Font("Consolas", 10f),
-            BackColor = Color.FromArgb(252, 252, 250),
-            Text = "选择股票后此处显示综合分析报告。",
-        };
-        _txtExplain = new TextBox
-        {
-            Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
-            ScrollBars = ScrollBars.Vertical, WordWrap = true,
-            Font = new Font("Microsoft YaHei UI", 10f),
-            BackColor = Color.FromArgb(252, 252, 250),
-            Text = "选择股票后此处用大白话解读各项指标。",
-        };
+        // ---- 右侧：分析报告（4 个标签）----
+        _txtReport = MakeReportBox("选择股票后此处显示综合分析报告。", monoFont: true);
+        _txtExplain = MakeReportBox("选择股票后此处用大白话解读各项指标。", monoFont: false);
+        _txtFundFlow = MakeReportBox("选择股票后此处显示基本面 + 资金流向。", monoFont: true);
+        _txtRisk = MakeReportBox("选择股票后此处显示风险指标。", monoFont: true);
+
         var rightTabs = new TabControl { Dock = DockStyle.Fill };
-        var pgReport = new TabPage("综合分析");
-        pgReport.Controls.Add(_txtReport);
-        var pgExplain = new TabPage("指标解读 (小白版)");
-        pgExplain.Controls.Add(_txtExplain);
-        rightTabs.TabPages.AddRange(new[] { pgReport, pgExplain });
+        var pgReport = new TabPage("综合分析");      pgReport.Controls.Add(_txtReport);
+        var pgExplain = new TabPage("指标解读");      pgExplain.Controls.Add(_txtExplain);
+        var pgFund = new TabPage("基本面+资金");      pgFund.Controls.Add(_txtFundFlow);
+        var pgRisk = new TabPage("风险");             pgRisk.Controls.Add(_txtRisk);
+        rightTabs.TabPages.AddRange(new[] { pgReport, pgExplain, pgFund, pgRisk });
 
         var rightPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         rightPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
@@ -194,27 +196,42 @@ internal sealed class MainForm : Form
         Controls.Add(splitMain);
         Controls.Add(tool);
 
+        // 鼠标悬停 -> 十字光标
+        _plotPrice.MouseMove += OnPriceMouseMove;
+        _plotPrice.MouseLeave += (_, _) => HideCrosshair();
+
         Load += (_, _) =>
         {
             splitMain.SplitterDistance = 200;
             splitRight.SplitterDistance = (int)(splitRight.Width * 0.72);
+            ApplyTheme();
             ConfigureEmptyPlots();
         };
 
-        FormClosing += (_, _) => _settings.Save();
+        FormClosing += (_, _) => { _settings.Save(); _cache.Dispose(); };
     }
+
+    private static TextBox MakeReportBox(string placeholder, bool monoFont) => new()
+    {
+        Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+        ScrollBars = ScrollBars.Vertical, WordWrap = true,
+        Font = monoFont ? new Font("Consolas", 10f) : new Font("Microsoft YaHei UI", 10f),
+        BackColor = Color.FromArgb(252, 252, 250),
+        Text = placeholder,
+    };
 
     // ============================================================
     // 数据源
     // ============================================================
     private void ApplyDataSource()
     {
-        _dataSource = _settings.DataSource switch
+        IStockDataSource raw = _settings.DataSource switch
         {
             "Tushare" => new TushareStockDataSource(_settings.TushareToken, _sina),
             "EastMoney" => new EastMoneyStockDataSource(_sina),
             _ => _sina,
         };
+        _dataSource = _settings.EnableCache ? new CachedDataSource(raw, _cache) : raw;
     }
 
     private void OpenSettings()
@@ -222,16 +239,34 @@ internal sealed class MainForm : Form
         using var dlg = new SettingsForm(_settings);
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
+            bool themeChanged = _settings.DarkMode != dlg.DarkMode;
             _settings.DataSource = dlg.DataSource;
             _settings.TushareToken = dlg.TushareToken;
+            _settings.DarkMode = dlg.DarkMode;
+            _settings.EnableCache = dlg.EnableCache;
             _settings.Save();
             ApplyDataSource();
-            MessageBox.Show(this, $"已切换至：{_dataSource.Name}", "设置", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (themeChanged) ApplyTheme();
+            if (_currentBars.Count > 0) RenderAll();
         }
     }
 
     // ============================================================
-    // 搜索 / 选股
+    // 主题
+    // ============================================================
+    private void ApplyTheme()
+    {
+        _theme = _settings.DarkMode ? Themes.Dark : Themes.Light;
+        Themes.ApplyToControls(this, _theme);
+        foreach (var fp in new[] { _plotPrice, _plotVolume, _plotMacd, _plotKdj, _plotChip })
+        {
+            Themes.ApplyToPlot(fp.Plot, _theme);
+            fp.Refresh();
+        }
+    }
+
+    // ============================================================
+    // 搜索 / 选股 / 加载
     // ============================================================
     private async Task DoSearchAsync()
     {
@@ -240,7 +275,7 @@ internal sealed class MainForm : Form
         try
         {
             _lstSearch.Items.Clear();
-            var results = await _sina.SearchAsync(kw); // 搜索固定走新浪
+            var results = await _sina.SearchAsync(kw);
             foreach (var r in results) _lstSearch.Items.Add(r);
             if (results.Count == 0) _lstSearch.Items.Add("(无匹配结果)");
             else if (results.Count == 1) await SelectStockAsync(results[0]);
@@ -288,6 +323,9 @@ internal sealed class MainForm : Form
 
             UpdateHeader(quote);
             RenderAll();
+
+            // 异步拉取基本面 / 资金流向（不阻塞）
+            _ = LoadFundFlowAsync(_currentStock, ct);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -298,6 +336,23 @@ internal sealed class MainForm : Form
         finally { UseWaitCursor = false; }
     }
 
+    private async Task LoadFundFlowAsync(StockInfo stock, CancellationToken ct)
+    {
+        try
+        {
+            var f = await _emExtras.GetFundamentalsAsync(stock, ct);
+            var mf = await _emExtras.GetMoneyFlowAsync(stock, ct);
+            if (ct.IsCancellationRequested) return;
+            var sb = new StringBuilder();
+            sb.Append(EastMoneyExtras.FormatFundamentals(f));
+            sb.AppendLine();
+            sb.Append(EastMoneyExtras.FormatMoneyFlow(mf));
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(() => _txtFundFlow.Text = sb.ToString());
+        }
+        catch { /* 失败静默 */ }
+    }
+
     private void UpdateHeader(RealtimeQuote? quote)
     {
         if (_currentStock == null) return;
@@ -306,12 +361,12 @@ internal sealed class MainForm : Form
         {
             var sign = quote.ChangePct >= 0 ? "+" : "";
             _lblHeader.Text = $"{_currentStock.Code} {_currentStock.Name}   现价 {quote.Last:F2}   {sign}{quote.ChangePct:F2}%   [{src}]";
-            _lblHeader.ForeColor = quote.ChangePct >= 0 ? Color.Crimson : Color.ForestGreen;
+            _lblHeader.ForeColor = quote.ChangePct >= 0 ? Color.Crimson : Color.LimeGreen;
         }
         else
         {
             _lblHeader.Text = $"{_currentStock.Code} {_currentStock.Name}   [{src}]";
-            _lblHeader.ForeColor = Color.Black;
+            _lblHeader.ForeColor = _theme.WinFore;
         }
     }
 
@@ -330,10 +385,8 @@ internal sealed class MainForm : Form
         if (_settings.Watchlist.Any(s => s.FullCode == _currentStock.FullCode)) return;
         _settings.Watchlist.Add(new StockInfo
         {
-            Code = _currentStock.Code,
-            Name = _currentStock.Name,
-            FullCode = _currentStock.FullCode,
-            Market = _currentStock.Market,
+            Code = _currentStock.Code, Name = _currentStock.Name,
+            FullCode = _currentStock.FullCode, Market = _currentStock.Market,
         });
         _settings.Save();
         RefreshWatchlistUi();
@@ -364,17 +417,22 @@ internal sealed class MainForm : Form
         if (_currentBars.Count == 0) return;
         RenderPriceChart();
         RenderVolumeChart();
-        RenderMacdChart();
+        var crossSummary = RenderMacdChart();
         RenderKdjChart();
         var chip = ChipDistribution.Calculate(_currentBars);
         RenderChipChart(chip);
-        var report = SentimentAnalyzer.Analyze(_currentBars, chip);
-        _txtReport.Text = SentimentAnalyzer.Format(report);
-        _txtExplain.Text = IndicatorExplainer.Format(IndicatorExplainer.Explain(_currentBars, chip));
-    }
 
-    private static readonly ScottPlot.Color RedUp = ScottPlot.Color.FromHex("#E03131");
-    private static readonly ScottPlot.Color GreenDown = ScottPlot.Color.FromHex("#2F9E44");
+        var report = SentimentAnalyzer.Analyze(_currentBars, chip);
+        var sb = new StringBuilder(SentimentAnalyzer.Format(report));
+        sb.AppendLine();
+        sb.Append(crossSummary);
+        _txtReport.Text = sb.ToString();
+
+        _txtExplain.Text = IndicatorExplainer.Format(IndicatorExplainer.Explain(_currentBars, chip));
+
+        var risk = RiskMetrics.Calculate(_currentBars);
+        _txtRisk.Text = RiskMetrics.Format(risk, _currentBars[^1].Close);
+    }
 
     private void RenderPriceChart()
     {
@@ -393,10 +451,10 @@ internal sealed class MainForm : Form
             ohlcs.Add(new OHLC(b.Open, b.High, b.Low, b.Close, b.Date, span));
 
         var cs = p.Add.Candlestick(ohlcs);
-        cs.RisingFillStyle.Color = RedUp;
-        cs.FallingFillStyle.Color = GreenDown;
-        cs.RisingLineStyle.Color = RedUp;
-        cs.FallingLineStyle.Color = GreenDown;
+        cs.RisingFillStyle.Color = _theme.RedUp;
+        cs.FallingFillStyle.Color = _theme.GreenDown;
+        cs.RisingLineStyle.Color = _theme.RedUp;
+        cs.FallingLineStyle.Color = _theme.GreenDown;
 
         var closes = bars.Select(b => b.Close).ToArray();
         var dates = bars.Select(b => b.Date.ToOADate()).ToArray();
@@ -406,23 +464,47 @@ internal sealed class MainForm : Form
         AddMa(p, dates, closes, 20, ScottPlot.Color.FromHex("#7048E8"));
         AddMa(p, dates, closes, 60, ScottPlot.Color.FromHex("#0CA678"));
 
-        // BOLL
         var boll = Indicators.Indicators.BOLL(closes);
         AddLine(p, dates, boll.Upper, ScottPlot.Color.FromHex("#868E96"), "BOLL上");
         AddLine(p, dates, boll.Mid, ScottPlot.Color.FromHex("#495057"), "BOLL中");
         AddLine(p, dates, boll.Lower, ScottPlot.Color.FromHex("#868E96"), "BOLL下");
 
-        p.Title($"{_currentStock!.Code} {_currentStock.Name}  K线 / 均线 / BOLL");
+        // 形态识别 → 标注
+        var hits = Patterns.Detect(bars);
+        foreach (var h in hits)
+        {
+            double y = h.Bullish ? bars[h.Index].Low * 0.985 : bars[h.Index].High * 1.015;
+            var marker = p.Add.Marker(dates[h.Index], y);
+            marker.MarkerStyle.Shape = h.Bullish ? MarkerShape.FilledTriangleUp : MarkerShape.FilledTriangleDown;
+            marker.MarkerStyle.Size = 12;
+            marker.MarkerStyle.FillColor = h.Bullish ? _theme.RedUp.WithAlpha(0.85) : _theme.GreenDown.WithAlpha(0.85);
+            marker.MarkerStyle.LineColor = h.Bullish ? _theme.RedUp : _theme.GreenDown;
+        }
+
+        // 十字光标 + 浮窗（默认隐藏）
+        _crosshair = p.Add.Crosshair(0, 0);
+        _crosshair.LineWidth = 1;
+        _crosshair.LineColor = _theme.Axis.WithAlpha(0.5);
+        _crosshair.IsVisible = false;
+
+        _hoverNote = p.Add.Annotation("", Alignment.UpperRight);
+        _hoverNote.LabelFontSize = 11;
+        _hoverNote.LabelBackgroundColor = _theme.DataBack.WithAlpha(0.92);
+        _hoverNote.LabelFontColor = _theme.Axis;
+        _hoverNote.LabelBorderColor = _theme.Grid;
+        _hoverNote.IsVisible = false;
+
+        p.Title($"{_currentStock!.Code} {_currentStock.Name}  K线 / 均线 / BOLL  ({hits.Count} 个形态)");
         p.Axes.DateTimeTicksBottom();
         p.ShowLegend(Alignment.UpperLeft);
+        Themes.ApplyToPlot(p, _theme);
         _plotPrice.Refresh();
     }
 
     private static void AddMa(Plot p, double[] dates, double[] closes, int period, ScottPlot.Color color)
     {
         var ma = Indicators.Indicators.SMA(closes, period);
-        var xs = new List<double>();
-        var ys = new List<double>();
+        var xs = new List<double>(); var ys = new List<double>();
         for (int i = 0; i < ma.Length; i++)
         {
             if (double.IsNaN(ma[i])) continue;
@@ -430,16 +512,13 @@ internal sealed class MainForm : Form
         }
         if (xs.Count == 0) return;
         var sc = p.Add.Scatter(xs.ToArray(), ys.ToArray());
-        sc.LineWidth = 1.4f;
-        sc.MarkerSize = 0;
-        sc.Color = color;
+        sc.LineWidth = 1.4f; sc.MarkerSize = 0; sc.Color = color;
         sc.LegendText = $"MA{period}";
     }
 
     private static void AddLine(Plot p, double[] dates, double[] vals, ScottPlot.Color color, string label)
     {
-        var xs = new List<double>();
-        var ys = new List<double>();
+        var xs = new List<double>(); var ys = new List<double>();
         for (int i = 0; i < vals.Length; i++)
         {
             if (double.IsNaN(vals[i])) continue;
@@ -447,9 +526,7 @@ internal sealed class MainForm : Form
         }
         if (xs.Count == 0) return;
         var sc = p.Add.Scatter(xs.ToArray(), ys.ToArray());
-        sc.LineWidth = 1f;
-        sc.MarkerSize = 0;
-        sc.Color = color;
+        sc.LineWidth = 1f; sc.MarkerSize = 0; sc.Color = color;
         sc.LineStyle.Pattern = LinePattern.Dashed;
         sc.LegendText = label;
     }
@@ -469,27 +546,29 @@ internal sealed class MainForm : Form
             {
                 Position = b.Date.ToOADate(),
                 Value = b.Volume,
-                FillColor = up ? RedUp : GreenDown,
-                LineColor = up ? RedUp : GreenDown,
+                FillColor = up ? _theme.RedUp : _theme.GreenDown,
+                LineColor = up ? _theme.RedUp : _theme.GreenDown,
                 Size = 0.7,
             });
         }
         p.Add.Bars(blist);
         p.Title("成交量");
         p.Axes.DateTimeTicksBottom();
+        Themes.ApplyToPlot(p, _theme);
         _plotVolume.Refresh();
     }
 
-    private void RenderMacdChart()
+    /// <summary>渲染 MACD 并返回金/死叉历史统计文本。</summary>
+    private string RenderMacdChart()
     {
         var p = _plotMacd.Plot;
         p.Clear();
 
-        var closes = _currentBars.Select(b => b.Close).ToArray();
-        var dates = _currentBars.Select(b => b.Date.ToOADate()).ToArray();
+        var bars = _currentBars;
+        var closes = bars.Select(b => b.Close).ToArray();
+        var dates = bars.Select(b => b.Date.ToOADate()).ToArray();
         var macd = Indicators.Indicators.MACD(closes);
 
-        // 柱
         var blist = new List<Bar>();
         for (int i = 0; i < macd.Hist.Length; i++)
         {
@@ -497,8 +576,8 @@ internal sealed class MainForm : Form
             {
                 Position = dates[i],
                 Value = macd.Hist[i],
-                FillColor = macd.Hist[i] >= 0 ? RedUp : GreenDown,
-                LineColor = macd.Hist[i] >= 0 ? RedUp : GreenDown,
+                FillColor = macd.Hist[i] >= 0 ? _theme.RedUp : _theme.GreenDown,
+                LineColor = macd.Hist[i] >= 0 ? _theme.RedUp : _theme.GreenDown,
                 Size = 0.6,
             });
         }
@@ -506,18 +585,50 @@ internal sealed class MainForm : Form
 
         var difLine = p.Add.Scatter(dates, macd.Dif);
         difLine.MarkerSize = 0; difLine.LineWidth = 1.3f;
-        difLine.Color = ScottPlot.Color.FromHex("#1971C2");
-        difLine.LegendText = "DIF";
-
+        difLine.Color = ScottPlot.Color.FromHex("#1971C2"); difLine.LegendText = "DIF";
         var deaLine = p.Add.Scatter(dates, macd.Dea);
         deaLine.MarkerSize = 0; deaLine.LineWidth = 1.3f;
-        deaLine.Color = ScottPlot.Color.FromHex("#F59F00");
-        deaLine.LegendText = "DEA";
+        deaLine.Color = ScottPlot.Color.FromHex("#F59F00"); deaLine.LegendText = "DEA";
+
+        // 检测金死叉并标注 + 统计次日表现
+        int gold = 0, dead = 0;
+        double goldRet = 0, deadRet = 0;
+        int goldWin = 0, deadWin = 0;
+        for (int i = 1; i < macd.Hist.Length; i++)
+        {
+            bool g = macd.Hist[i] > 0 && macd.Hist[i - 1] <= 0;
+            bool d = macd.Hist[i] < 0 && macd.Hist[i - 1] >= 0;
+            if (!g && !d) continue;
+            double y = g ? Math.Min(macd.Dif[i], macd.Dea[i]) - 0.02 : Math.Max(macd.Dif[i], macd.Dea[i]) + 0.02;
+            var m = p.Add.Marker(dates[i], y);
+            m.MarkerStyle.Shape = g ? MarkerShape.FilledTriangleUp : MarkerShape.FilledTriangleDown;
+            m.MarkerStyle.Size = 10;
+            m.MarkerStyle.FillColor = g ? _theme.RedUp : _theme.GreenDown;
+            m.MarkerStyle.LineColor = g ? _theme.RedUp : _theme.GreenDown;
+
+            if (i + 1 < bars.Count)
+            {
+                double r = bars[i + 1].Close / bars[i].Close - 1.0;
+                if (g) { gold++; goldRet += r; if (r > 0) goldWin++; }
+                else { dead++; deadRet += r; if (r < 0) deadWin++; }
+            }
+        }
 
         p.Title("MACD (12,26,9)");
         p.Axes.DateTimeTicksBottom();
         p.ShowLegend(Alignment.UpperLeft);
+        Themes.ApplyToPlot(p, _theme);
         _plotMacd.Refresh();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("—— MACD 历史信号统计（次日表现）——");
+        if (gold > 0)
+            sb.AppendLine($"  • 金叉 ▲ 共 {gold} 次，次日平均涨幅 {goldRet / gold:P2}，胜率 {(double)goldWin / gold:P0}");
+        else sb.AppendLine("  • 金叉 ▲ 区间内未出现");
+        if (dead > 0)
+            sb.AppendLine($"  • 死叉 ▼ 共 {dead} 次，次日平均涨幅 {deadRet / dead:P2}，下跌占比 {(double)deadWin / dead:P0}");
+        else sb.AppendLine("  • 死叉 ▼ 区间内未出现");
+        return sb.ToString();
     }
 
     private void RenderKdjChart()
@@ -536,18 +647,31 @@ internal sealed class MainForm : Form
         var lj = p.Add.Scatter(dates, kdj.J); lj.MarkerSize = 0; lj.LineWidth = 1.2f;
         lj.Color = ScottPlot.Color.FromHex("#E03131"); lj.LegendText = "J";
 
-        // RSI 用浅灰副线（共享同一坐标，0-100 同尺度）
         var lr = p.Add.Scatter(dates, rsi); lr.MarkerSize = 0; lr.LineWidth = 1.0f;
         lr.Color = ScottPlot.Color.FromHex("#7048E8"); lr.LegendText = "RSI14";
         lr.LineStyle.Pattern = LinePattern.Dashed;
 
-        // 参考线 20/80
+        // KDJ 金叉 / 死叉
+        for (int i = 1; i < kdj.K.Length; i++)
+        {
+            bool g = kdj.K[i] > kdj.D[i] && kdj.K[i - 1] <= kdj.D[i - 1];
+            bool d = kdj.K[i] < kdj.D[i] && kdj.K[i - 1] >= kdj.D[i - 1];
+            if (!g && !d) continue;
+            double y = g ? kdj.K[i] - 4 : kdj.K[i] + 4;
+            var m = p.Add.Marker(dates[i], y);
+            m.MarkerStyle.Shape = g ? MarkerShape.FilledTriangleUp : MarkerShape.FilledTriangleDown;
+            m.MarkerStyle.Size = 8;
+            m.MarkerStyle.FillColor = g ? _theme.RedUp : _theme.GreenDown;
+            m.MarkerStyle.LineColor = g ? _theme.RedUp : _theme.GreenDown;
+        }
+
         var hl1 = p.Add.HorizontalLine(80); hl1.Color = ScottPlot.Color.FromHex("#ADB5BD"); hl1.LinePattern = LinePattern.Dotted;
         var hl2 = p.Add.HorizontalLine(20); hl2.Color = ScottPlot.Color.FromHex("#ADB5BD"); hl2.LinePattern = LinePattern.Dotted;
 
         p.Title("KDJ (9,3,3) / RSI(14)");
         p.Axes.DateTimeTicksBottom();
         p.ShowLegend(Alignment.UpperLeft);
+        Themes.ApplyToPlot(p, _theme);
         _plotKdj.Refresh();
     }
 
@@ -555,10 +679,7 @@ internal sealed class MainForm : Form
     {
         var p = _plotChip.Plot;
         p.Clear();
-
         if (chip.Prices.Length == 0) { _plotChip.Refresh(); return; }
-
-        // 横向柱：x = 筹码, y = 价格
         double maxChip = chip.Chips.Max();
         if (maxChip <= 0) { _plotChip.Refresh(); return; }
 
@@ -569,7 +690,7 @@ internal sealed class MainForm : Form
             blist.Add(new Bar
             {
                 Position = chip.Prices[i],
-                Value = chip.Chips[i] / maxChip,  // 归一化
+                Value = chip.Chips[i] / maxChip,
                 FillColor = ScottPlot.Color.FromHex("#4DABF7"),
                 LineColor = ScottPlot.Color.FromHex("#4DABF7"),
                 Size = step * 0.9,
@@ -578,22 +699,179 @@ internal sealed class MainForm : Form
         }
         p.Add.Bars(blist);
 
-        // 当前价 + 平均成本
         double cur = _currentBars[^1].Close;
         var hlCur = p.Add.HorizontalLine(cur);
-        hlCur.Color = RedUp; hlCur.LineWidth = 2;
-        hlCur.Text = $"现价 {cur:F2}";
-        hlCur.LabelOppositeAxis = true;
+        hlCur.Color = _theme.RedUp; hlCur.LineWidth = 2;
+        hlCur.Text = $"现价 {cur:F2}"; hlCur.LabelOppositeAxis = true;
 
         var hlAvg = p.Add.HorizontalLine(chip.AvgCost);
         hlAvg.Color = ScottPlot.Color.FromHex("#7048E8"); hlAvg.LineWidth = 2;
         hlAvg.LinePattern = LinePattern.Dashed;
-        hlAvg.Text = $"均成本 {chip.AvgCost:F2}";
-        hlAvg.LabelOppositeAxis = true;
+        hlAvg.Text = $"均成本 {chip.AvgCost:F2}"; hlAvg.LabelOppositeAxis = true;
 
         p.Title($"筹码分布   获利盘 {chip.ProfitRatio:P1}   70%集中度 {chip.Concentration70:P1}");
         p.XLabel("筹码相对密度");
         p.YLabel("价格");
+        Themes.ApplyToPlot(p, _theme);
         _plotChip.Refresh();
+    }
+
+    // ============================================================
+    // 十字光标
+    // ============================================================
+    private void OnPriceMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (_currentBars.Count == 0 || _crosshair == null || _hoverNote == null) return;
+        Pixel mp = new(e.X, e.Y);
+        Coordinates c = _plotPrice.Plot.GetCoordinates(mp);
+
+        // 找最近的 K 线
+        int idx = -1;
+        double bestDist = double.MaxValue;
+        for (int i = 0; i < _currentBars.Count; i++)
+        {
+            double d = Math.Abs(_currentBars[i].Date.ToOADate() - c.X);
+            if (d < bestDist) { bestDist = d; idx = i; }
+        }
+        if (idx < 0) return;
+        var b = _currentBars[idx];
+        double prev = idx > 0 ? _currentBars[idx - 1].Close : b.Open;
+        double chg = (b.Close - prev) / prev * 100;
+        string sign = chg >= 0 ? "+" : "";
+
+        _crosshair.IsVisible = true;
+        _crosshair.Position = new Coordinates(b.Date.ToOADate(), b.Close);
+
+        _hoverNote.IsVisible = true;
+        _hoverNote.Text =
+            $"{b.Date:yyyy-MM-dd}\n" +
+            $"开 {b.Open:F2}  高 {b.High:F2}\n" +
+            $"低 {b.Low:F2}  收 {b.Close:F2}\n" +
+            $"涨跌 {sign}{chg:F2}%\n" +
+            $"成交量 {b.Volume / 10000:F1} 万手";
+        _plotPrice.Refresh();
+    }
+
+    private void HideCrosshair()
+    {
+        if (_crosshair != null) _crosshair.IsVisible = false;
+        if (_hoverNote != null) _hoverNote.IsVisible = false;
+        _plotPrice.Refresh();
+    }
+
+    // ============================================================
+    // 导出
+    // ============================================================
+    private void ShowExportMenu()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("导出 K 线图 PNG", null, (_, _) => ExportPng(_plotPrice, "kline"));
+        menu.Items.Add("导出 全部图表 PNG (拼图)", null, (_, _) => ExportAllPng());
+        menu.Items.Add("导出 K 线 CSV", null, (_, _) => ExportCsv());
+        menu.Items.Add("导出 分析报告 Markdown", null, (_, _) => ExportMarkdown());
+        menu.Show(_btnExport, new Point(0, _btnExport.Height));
+    }
+
+    private void ExportPng(FormsPlot fp, string suffix)
+    {
+        if (_currentStock == null) return;
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "PNG (*.png)|*.png",
+            FileName = $"{_currentStock.Code}_{_currentStock.Name}_{suffix}_{DateTime.Now:yyyyMMddHHmmss}.png",
+        };
+        if (sfd.ShowDialog(this) != DialogResult.OK) return;
+        fp.Plot.SavePng(sfd.FileName, fp.Width, fp.Height);
+        MessageBox.Show(this, "已导出：" + sfd.FileName, "导出完成");
+    }
+
+    private void ExportAllPng()
+    {
+        if (_currentStock == null) return;
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "PNG (*.png)|*.png",
+            FileName = $"{_currentStock.Code}_{_currentStock.Name}_full_{DateTime.Now:yyyyMMddHHmmss}.png",
+        };
+        if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+        // 简单方案：分别保存 4 张然后拼接
+        int W = 1400, H = 900;
+        using var bmp = new Bitmap(W, H);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(_theme.WinBack);
+
+        DrawPlotInto(g, _plotPrice, 0, 0, W, (int)(H * 0.5));
+        DrawPlotInto(g, _plotVolume, 0, (int)(H * 0.5), W, (int)(H * 0.16));
+        DrawPlotInto(g, _plotMacd, 0, (int)(H * 0.66), W, (int)(H * 0.17));
+        DrawPlotInto(g, _plotKdj, 0, (int)(H * 0.83), W, (int)(H * 0.17));
+        bmp.Save(sfd.FileName, System.Drawing.Imaging.ImageFormat.Png);
+        MessageBox.Show(this, "已导出：" + sfd.FileName, "导出完成");
+    }
+
+    private static void DrawPlotInto(Graphics g, FormsPlot fp, int x, int y, int w, int h)
+    {
+        var img = fp.Plot.GetImage(w, h);
+        var bytes = img.GetImageBytes();
+        using var ms = new MemoryStream(bytes);
+        using var bmp = new Bitmap(ms);
+        g.DrawImage(bmp, x, y, w, h);
+    }
+
+    private void ExportCsv()
+    {
+        if (_currentStock == null || _currentBars.Count == 0) return;
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "CSV (*.csv)|*.csv",
+            FileName = $"{_currentStock.Code}_{_currentStock.Name}_{DateTime.Now:yyyyMMdd}.csv",
+        };
+        if (sfd.ShowDialog(this) != DialogResult.OK) return;
+        using var sw = new StreamWriter(sfd.FileName, false, new UTF8Encoding(true));
+        sw.WriteLine("date,open,high,low,close,volume,amount");
+        var ci = CultureInfo.InvariantCulture;
+        foreach (var b in _currentBars)
+            sw.WriteLine($"{b.Date:yyyy-MM-dd},{b.Open.ToString(ci)},{b.High.ToString(ci)},{b.Low.ToString(ci)},{b.Close.ToString(ci)},{b.Volume.ToString(ci)},{b.Amount.ToString(ci)}");
+        MessageBox.Show(this, "已导出：" + sfd.FileName, "导出完成");
+    }
+
+    private void ExportMarkdown()
+    {
+        if (_currentStock == null || _currentBars.Count == 0) return;
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "Markdown (*.md)|*.md",
+            FileName = $"{_currentStock.Code}_{_currentStock.Name}_report_{DateTime.Now:yyyyMMdd}.md",
+        };
+        if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# {_currentStock.Code} {_currentStock.Name} 技术分析报告");
+        sb.AppendLine();
+        sb.AppendLine($"- 生成时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"- 数据源：{_dataSource.Name}");
+        sb.AppendLine($"- 周期：{_cboPeriod.SelectedItem}    样本数：{_currentBars.Count}");
+        sb.AppendLine($"- 区间：{_currentBars[0].Date:yyyy-MM-dd} ~ {_currentBars[^1].Date:yyyy-MM-dd}");
+        sb.AppendLine();
+        sb.AppendLine("## 综合分析");
+        sb.AppendLine("```");
+        sb.AppendLine(_txtReport.Text);
+        sb.AppendLine("```");
+        sb.AppendLine("## 指标解读");
+        sb.AppendLine("```");
+        sb.AppendLine(_txtExplain.Text);
+        sb.AppendLine("```");
+        sb.AppendLine("## 基本面 + 资金流向");
+        sb.AppendLine("```");
+        sb.AppendLine(_txtFundFlow.Text);
+        sb.AppendLine("```");
+        sb.AppendLine("## 风险指标");
+        sb.AppendLine("```");
+        sb.AppendLine(_txtRisk.Text);
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("> ⚠️ 本报告仅供学习研究，不构成任何投资建议。");
+        File.WriteAllText(sfd.FileName, sb.ToString(), new UTF8Encoding(true));
+        MessageBox.Show(this, "已导出：" + sfd.FileName, "导出完成");
     }
 }

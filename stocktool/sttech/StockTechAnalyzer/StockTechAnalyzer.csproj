@@ -15,6 +15,7 @@
   <ItemGroup>
     <PackageReference Include="ScottPlot.WinForms" Version="5.0.55" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
   </ItemGroup>
 
 </Project>
