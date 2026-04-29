@@ -33,6 +33,7 @@ internal sealed class MainForm : Form
     private readonly NumericUpDown _numCount;
     private readonly Label _lblHeader;
     private readonly TextBox _txtReport;
+    private readonly TextBox _txtExplain;
 
     private readonly FormsPlot _plotPrice = new() { Dock = DockStyle.Fill };
     private readonly FormsPlot _plotVolume = new() { Dock = DockStyle.Fill };
@@ -151,7 +152,7 @@ internal sealed class MainForm : Form
 
         tabs.TabPages.AddRange(new[] { pgKline, pgChip });
 
-        // ---- 右侧：分析报告 ----
+        // ---- 右侧：分析报告（综合 / 小白解读 双标签）----
         _txtReport = new TextBox
         {
             Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
@@ -160,11 +161,26 @@ internal sealed class MainForm : Form
             BackColor = Color.FromArgb(252, 252, 250),
             Text = "选择股票后此处显示综合分析报告。",
         };
+        _txtExplain = new TextBox
+        {
+            Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical, WordWrap = true,
+            Font = new Font("Microsoft YaHei UI", 10f),
+            BackColor = Color.FromArgb(252, 252, 250),
+            Text = "选择股票后此处用大白话解读各项指标。",
+        };
+        var rightTabs = new TabControl { Dock = DockStyle.Fill };
+        var pgReport = new TabPage("综合分析");
+        pgReport.Controls.Add(_txtReport);
+        var pgExplain = new TabPage("指标解读 (小白版)");
+        pgExplain.Controls.Add(_txtExplain);
+        rightTabs.TabPages.AddRange(new[] { pgReport, pgExplain });
+
         var rightPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         rightPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         rightPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        rightPanel.Controls.Add(new Label { Text = " 综合分析", Dock = DockStyle.Fill, BackColor = Color.Gainsboro }, 0, 0);
-        rightPanel.Controls.Add(_txtReport, 0, 1);
+        rightPanel.Controls.Add(new Label { Text = " 分析面板", Dock = DockStyle.Fill, BackColor = Color.Gainsboro }, 0, 0);
+        rightPanel.Controls.Add(rightTabs, 0, 1);
 
         // ---- 主分隔 ----
         var splitMain = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 200 };
@@ -193,9 +209,12 @@ internal sealed class MainForm : Form
     // ============================================================
     private void ApplyDataSource()
     {
-        _dataSource = _settings.DataSource == "Tushare"
-            ? new TushareStockDataSource(_settings.TushareToken, _sina)
-            : _sina;
+        _dataSource = _settings.DataSource switch
+        {
+            "Tushare" => new TushareStockDataSource(_settings.TushareToken, _sina),
+            "EastMoney" => new EastMoneyStockDataSource(_sina),
+            _ => _sina,
+        };
     }
 
     private void OpenSettings()
@@ -351,6 +370,7 @@ internal sealed class MainForm : Form
         RenderChipChart(chip);
         var report = SentimentAnalyzer.Analyze(_currentBars, chip);
         _txtReport.Text = SentimentAnalyzer.Format(report);
+        _txtExplain.Text = IndicatorExplainer.Format(IndicatorExplainer.Explain(_currentBars, chip));
     }
 
     private static readonly ScottPlot.Color RedUp = ScottPlot.Color.FromHex("#E03131");

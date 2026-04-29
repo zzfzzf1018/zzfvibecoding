@@ -26,8 +26,13 @@ internal sealed class SettingsForm : Form
             Left = 100, Top = 20, Width = 300,
             DropDownStyle = ComboBoxStyle.DropDownList,
         };
-        _cboSource.Items.AddRange(new object[] { "Sina", "Tushare" });
-        _cboSource.SelectedItem = settings.DataSource == "Tushare" ? "Tushare" : "Sina";
+        _cboSource.Items.AddRange(new object[] { "Sina", "EastMoney", "Tushare" });
+        _cboSource.SelectedItem = settings.DataSource switch
+        {
+            "Tushare" => "Tushare",
+            "EastMoney" => "EastMoney",
+            _ => "Sina",
+        };
 
         var lblToken = new Label { Text = "Tushare Token：", Left = 20, Top = 64, Width = 100 };
         _txtToken = new TextBox
@@ -41,8 +46,8 @@ internal sealed class SettingsForm : Form
         {
             Left = 20, Top = 122, Width = 400, Height = 30,
             ForeColor = Color.Gray,
-            Text = "提示：Tushare 需在 tushare.pro 注册账号获取 Token。\n" +
-                   "新浪数据源免费且无需 Token，搜索/实时报价始终走新浪。",
+            Text = "提示：Sina / EastMoney 均免费、无需 Token。\n" +
+                   "Tushare 需在 tushare.pro 注册账号获取 Token；搜索/实时报价始终走新浪。",
         };
 
         var btnOk = new Button { Text = "确定", Left = 240, Top = 160, Width = 80, DialogResult = DialogResult.OK };
