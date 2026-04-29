@@ -915,6 +915,7 @@ internal sealed class MainForm : Form
         menu.Items.Add("多周期对比...", null, (_, _) => OpenMultiPeriod());
         menu.Items.Add("个股 / 大盘对比...", null, (_, _) => OpenCompare());
         menu.Items.Add("策略回测...", null, (_, _) => OpenBacktest());
+        menu.Items.Add("AI 短线方向预测...", null, (_, _) => OpenPredict());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("自选股看板...", null, (_, _) => new WatchlistDashboardForm(
             _settings.Watchlist, _dataSource, _sina, _theme, async s =>
@@ -923,6 +924,7 @@ internal sealed class MainForm : Form
                 await ReloadAsync();
             }).Show(this));
         menu.Items.Add("市场宽度 (龙虎榜/北向/板块)...", null, (_, _) => new MarketBoardForm(_theme).Show(this));
+        menu.Items.Add("可转债 / ETF...", null, (_, _) => new BondEtfForm(_theme).Show(this));
         menu.Show(_btnTools, new Point(0, _btnTools.Height));
     }
 
@@ -949,5 +951,12 @@ internal sealed class MainForm : Form
         if (_currentStock == null || _currentBars.Count < 60)
         { MessageBox.Show(this, "请先加载至少 60 根 K 线", "提示"); return; }
         new BacktestForm(_currentStock, _currentBars, _theme).Show(this);
+    }
+
+    private void OpenPredict()
+    {
+        if (_currentStock == null || _currentBars.Count < 80)
+        { MessageBox.Show(this, "请先加载至少 80 根 K 线（建议 200+）", "提示"); return; }
+        new PredictForm(_currentStock, _currentBars, _theme).Show(this);
     }
 }
