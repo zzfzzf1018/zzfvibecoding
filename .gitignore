@@ -67,3 +67,5 @@ toos/input.txt
 toos/compare/1.txt
 toos/compare/2.txt
 toos/compare/output.txt
+/stocktool/pdftomd/*.pdf
+/stocktool/pdftomd/*.txt
