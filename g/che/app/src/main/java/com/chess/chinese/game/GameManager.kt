@@ -134,7 +134,9 @@ class GameManager(
     private fun makeAIMove() {
         onAIThinking?.invoke(true)
         Thread {
-            val aiMove = ai?.getBestMove(board, currentTurn)
+            // 使用棋盘副本进行AI搜索，避免与UI线程产生竞争条件
+            val boardCopy = board.clone()
+            val aiMove = ai?.getBestMove(boardCopy, currentTurn)
             if (aiMove != null) {
                 val captured = board.movePiece(aiMove)
                 val recordedMove = Move(aiMove.fromRow, aiMove.fromCol, aiMove.toRow, aiMove.toCol, captured)

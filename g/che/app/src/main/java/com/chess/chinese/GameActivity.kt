@@ -64,7 +64,7 @@ class GameActivity : AppCompatActivity() {
 
         gameManager.onAIThinking = { thinking ->
             runOnUiThread {
-                tvThinking.visibility = if (thinking) View.VISIBLE else View.GONE
+                tvThinking.visibility = if (thinking) View.VISIBLE else View.INVISIBLE
                 btnUndo.isEnabled = !thinking
             }
         }
