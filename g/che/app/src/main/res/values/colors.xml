@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="red_piece">#CC0000</color>
+    <color name="black_piece">#1A1A1A</color>
+    <color name="board_bg">#F5DEB3</color>
+    <color name="board_line">#8B4513</color>
+</resources>
