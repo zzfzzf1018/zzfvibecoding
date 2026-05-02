@@ -155,7 +155,7 @@ namespace PdfToMarkdown.Services
                 .Select(m => m.Value)
                 .ToList();
 
-            if (allNumbers.Count < 4)
+            if (allNumbers.Count < 8)
                 return false;
 
             // Initialize quarters
@@ -164,61 +164,75 @@ namespace PdfToMarkdown.Services
             var q3 = new QuarterlyFinancial { Period = "Q3" };
             var q4 = new QuarterlyFinancial { Period = "Q4" };
 
-            // In the typical A-stock report format, numbers appear in groups of 4
-            // corresponding to Q1, Q2, Q3, Q4 for each metric row.
-            // The metrics order is typically: 营业收入, 净利润, 扣非净利润, 经营现金流
-            
             // Determine column order from text: check if Q1 comes first or Q4 comes first
-            // Usually: 第一季度 第二季度 第三季度 第四季度 (left to right)
-            int[] order = { 0, 1, 2, 3 }; // Q1, Q2, Q3, Q4
-
-            // Check actual order in text
-            var q1Pos = FindFirstPosition(text, @"第一季度|（1-3");
-            var q4Pos = FindFirstPosition(text, @"第四季度|（10-12");
+            int[] colOrder = { 0, 1, 2, 3 }; // Q1, Q2, Q3, Q4
+            var q1Pos = FindFirstPosition(text, @"第一季度|\(1-3|（1-3");
+            var q4Pos = FindFirstPosition(text, @"第四季度|\(10-12|（10-12");
             if (q1Pos >= 0 && q4Pos >= 0 && q4Pos < q1Pos)
             {
-                order = new[] { 3, 2, 1, 0 }; // reversed
+                colOrder = new[] { 3, 2, 1, 0 }; // reversed
             }
 
-            int numIdx = 0;
-            int numGroups = allNumbers.Count / 4;
+            // Detect layout: row-major (4 numbers per row) vs interleaved (column-major, 2 rows mixed)
+            // Heuristic: if numbers 0,1,2,3 are of similar magnitude → row-major
+            //            if numbers 0,2,4,6 are similar AND 1,3,5,7 are similar → interleaved
+            bool isInterleaved = DetectInterleaved(allNumbers);
 
-            // Map groups of 4 numbers to financial metrics
-            if (numGroups >= 1 && numIdx + 3 < allNumbers.Count)
+            if (isInterleaved)
             {
-                // 营业收入
-                q1.Revenue = ParseChineseNumber(allNumbers[numIdx + order[0]]);
-                q2.Revenue = ParseChineseNumber(allNumbers[numIdx + order[1]]);
-                q3.Revenue = ParseChineseNumber(allNumbers[numIdx + order[2]]);
-                q4.Revenue = ParseChineseNumber(allNumbers[numIdx + order[3]]);
-                numIdx += 4;
+                // Numbers are interleaved: R1_Q1, R2_Q1, R1_Q2, R2_Q2, R1_Q3, R2_Q3, R1_Q4, R2_Q4
+                // Two groups of 8: first group = 营业收入 + 净利润, second group = 扣非 + 现金流
+                AssignInterleavedGroup(allNumbers, 0, colOrder, 
+                    (q, v) => q.Revenue = v, 
+                    (q, v) => q.NetProfit = v,
+                    q1, q2, q3, q4);
+
+                if (allNumbers.Count >= 16)
+                {
+                    // For the second group (扣非净利润 + 经营现金流), we need to determine
+                    // which set (even/odd positions) is 扣非 vs 现金流.
+                    // Key insight: 扣非净利润 ≈ 净利润 in magnitude.
+                    AssignInterleavedGroup2(allNumbers, 8, colOrder, q1, q2, q3, q4);
+                }
             }
-            if (numGroups >= 2 && numIdx + 3 < allNumbers.Count)
+            else
             {
-                // 归属净利润
-                q1.NetProfit = ParseChineseNumber(allNumbers[numIdx + order[0]]);
-                q2.NetProfit = ParseChineseNumber(allNumbers[numIdx + order[1]]);
-                q3.NetProfit = ParseChineseNumber(allNumbers[numIdx + order[2]]);
-                q4.NetProfit = ParseChineseNumber(allNumbers[numIdx + order[3]]);
-                numIdx += 4;
-            }
-            if (numGroups >= 3 && numIdx + 3 < allNumbers.Count)
-            {
-                // 扣非净利润 (store as GrossProfit field for now)
-                q1.GrossProfit = ParseChineseNumber(allNumbers[numIdx + order[0]]);
-                q2.GrossProfit = ParseChineseNumber(allNumbers[numIdx + order[1]]);
-                q3.GrossProfit = ParseChineseNumber(allNumbers[numIdx + order[2]]);
-                q4.GrossProfit = ParseChineseNumber(allNumbers[numIdx + order[3]]);
-                numIdx += 4;
-            }
-            if (numGroups >= 4 && numIdx + 3 < allNumbers.Count)
-            {
-                // 经营活动现金流
-                q1.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + order[0]]);
-                q2.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + order[1]]);
-                q3.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + order[2]]);
-                q4.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + order[3]]);
-                numIdx += 4;
+                // Row-major: 4 numbers per metric row (standard layout)
+                int numIdx = 0;
+                int numGroups = allNumbers.Count / 4;
+
+                if (numGroups >= 1 && numIdx + 3 < allNumbers.Count)
+                {
+                    q1.Revenue = ParseChineseNumber(allNumbers[numIdx + colOrder[0]]);
+                    q2.Revenue = ParseChineseNumber(allNumbers[numIdx + colOrder[1]]);
+                    q3.Revenue = ParseChineseNumber(allNumbers[numIdx + colOrder[2]]);
+                    q4.Revenue = ParseChineseNumber(allNumbers[numIdx + colOrder[3]]);
+                    numIdx += 4;
+                }
+                if (numGroups >= 2 && numIdx + 3 < allNumbers.Count)
+                {
+                    q1.NetProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[0]]);
+                    q2.NetProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[1]]);
+                    q3.NetProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[2]]);
+                    q4.NetProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[3]]);
+                    numIdx += 4;
+                }
+                if (numGroups >= 3 && numIdx + 3 < allNumbers.Count)
+                {
+                    q1.GrossProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[0]]);
+                    q2.GrossProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[1]]);
+                    q3.GrossProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[2]]);
+                    q4.GrossProfit = ParseChineseNumber(allNumbers[numIdx + colOrder[3]]);
+                    numIdx += 4;
+                }
+                if (numGroups >= 4 && numIdx + 3 < allNumbers.Count)
+                {
+                    q1.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + colOrder[0]]);
+                    q2.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + colOrder[1]]);
+                    q3.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + colOrder[2]]);
+                    q4.OperatingCashFlow = ParseChineseNumber(allNumbers[numIdx + colOrder[3]]);
+                    numIdx += 4;
+                }
             }
 
             q1.RawText = $"营业收入:{q1.Revenue} 净利润:{q1.NetProfit} 扣非净利润:{q1.GrossProfit} 经营现金流:{q1.OperatingCashFlow}";
@@ -232,6 +246,123 @@ namespace PdfToMarkdown.Services
             data.QuarterlyData.Add(q4);
 
             return data.QuarterlyData.Any(q => q.Revenue != 0 || q.NetProfit != 0);
+        }
+
+        /// <summary>
+        /// Detects if numbers are interleaved (column-major with 2 rows per group).
+        /// In interleaved mode, numbers alternate between two magnitude levels:
+        /// e.g., [big, small, big, small, big, small, big, small]
+        /// In row-major mode, first 4 numbers have similar magnitude.
+        /// </summary>
+        private bool DetectInterleaved(List<string> allNumbers)
+        {
+            if (allNumbers.Count < 8) return false;
+
+            var values = allNumbers.Take(8).Select(n => Math.Abs((double)ParseChineseNumber(n))).ToList();
+
+            // Check row-major: are first 4 numbers of similar magnitude?
+            double maxFirst4 = values.Take(4).Max();
+            double minFirst4 = values.Take(4).Where(v => v > 0).DefaultIfEmpty(1).Min();
+            if (maxFirst4 > 0 && minFirst4 > 0 && maxFirst4 / minFirst4 < 10)
+            {
+                // First 4 numbers are within 10x of each other → likely row-major
+                return false;
+            }
+
+            // Check interleaved: even indices (0,2,4,6) similar AND odd indices (1,3,5,7) similar
+            var evenValues = new[] { values[0], values[2], values[4], values[6] };
+            var oddValues = new[] { values[1], values[3], values[5], values[7] };
+
+            double maxEven = evenValues.Max();
+            double minEven = evenValues.Where(v => v > 0).DefaultIfEmpty(1).Min();
+            double maxOdd = oddValues.Max();
+            double minOdd = oddValues.Where(v => v > 0).DefaultIfEmpty(1).Min();
+
+            bool evenSimilar = maxEven > 0 && minEven > 0 && maxEven / minEven < 10;
+            bool oddSimilar = maxOdd > 0 && minOdd > 0 && maxOdd / minOdd < 10;
+
+            // Also check that even and odd groups differ significantly in magnitude
+            double avgEven = evenValues.Where(v => v > 0).DefaultIfEmpty(0).Average();
+            double avgOdd = oddValues.Where(v => v > 0).DefaultIfEmpty(0).Average();
+            bool differentMagnitude = avgEven > 0 && avgOdd > 0 &&
+                (avgEven / avgOdd > 5 || avgOdd / avgEven > 5);
+
+            return evenSimilar && oddSimilar && differentMagnitude;
+        }
+
+        /// <summary>
+        /// Assigns values from an interleaved group of 8 numbers to two metrics across 4 quarters.
+        /// Pattern: metric1_Q1, metric2_Q1, metric1_Q2, metric2_Q2, metric1_Q3, metric2_Q3, metric1_Q4, metric2_Q4
+        /// </summary>
+        private void AssignInterleavedGroup(List<string> allNumbers, int startIdx, int[] colOrder,
+            Action<QuarterlyFinancial, decimal> assignMetric1,
+            Action<QuarterlyFinancial, decimal> assignMetric2,
+            QuarterlyFinancial q1, QuarterlyFinancial q2, QuarterlyFinancial q3, QuarterlyFinancial q4)
+        {
+            if (startIdx + 7 >= allNumbers.Count) return;
+
+            var quarters = new[] { q1, q2, q3, q4 };
+
+            // De-interleave: even indices = metric1, odd indices = metric2
+            // But apply column order (colOrder maps position to quarter)
+            for (int col = 0; col < 4; col++)
+            {
+                int qIdx = colOrder[col]; // which quarter this column corresponds to
+                int numBase = startIdx + col * 2;
+                assignMetric1(quarters[qIdx], ParseChineseNumber(allNumbers[numBase]));
+                assignMetric2(quarters[qIdx], ParseChineseNumber(allNumbers[numBase + 1]));
+            }
+        }
+
+        /// <summary>
+        /// Assigns the second interleaved group (扣非净利润 + 经营现金流) by using
+        /// business logic: 扣非净利润 should be close in magnitude to 净利润.
+        /// </summary>
+        private void AssignInterleavedGroup2(List<string> allNumbers, int startIdx, int[] colOrder,
+            QuarterlyFinancial q1, QuarterlyFinancial q2, QuarterlyFinancial q3, QuarterlyFinancial q4)
+        {
+            if (startIdx + 7 >= allNumbers.Count) return;
+
+            var quarters = new[] { q1, q2, q3, q4 };
+
+            // Extract even and odd position values
+            var evenValues = new decimal[4];
+            var oddValues = new decimal[4];
+            for (int col = 0; col < 4; col++)
+            {
+                int numBase = startIdx + col * 2;
+                evenValues[col] = ParseChineseNumber(allNumbers[numBase]);
+                oddValues[col] = ParseChineseNumber(allNumbers[numBase + 1]);
+            }
+
+            // Determine which set is 扣非净利润 by comparing to net profit
+            // 扣非净利润 ≈ 净利润 (similar order of magnitude)
+            decimal avgNetProfit = Math.Abs((q1.NetProfit + q2.NetProfit + q3.NetProfit + q4.NetProfit) / 4);
+            double avgEvenAbs = evenValues.Select(v => (double)Math.Abs(v)).Average();
+            double avgOddAbs = oddValues.Select(v => (double)Math.Abs(v)).Average();
+
+            // The set closer in magnitude to net profit is 扣非净利润
+            double evenRatio = avgEvenAbs > 0 && (double)avgNetProfit > 0
+                ? Math.Max(avgEvenAbs / (double)avgNetProfit, (double)avgNetProfit / avgEvenAbs) : double.MaxValue;
+            double oddRatio = avgOddAbs > 0 && (double)avgNetProfit > 0
+                ? Math.Max(avgOddAbs / (double)avgNetProfit, (double)avgNetProfit / avgOddAbs) : double.MaxValue;
+
+            bool evenIsDeducted = evenRatio < oddRatio;
+
+            for (int col = 0; col < 4; col++)
+            {
+                int qIdx = colOrder[col];
+                if (evenIsDeducted)
+                {
+                    quarters[qIdx].GrossProfit = evenValues[col];       // 扣非净利润
+                    quarters[qIdx].OperatingCashFlow = oddValues[col];  // 经营现金流
+                }
+                else
+                {
+                    quarters[qIdx].GrossProfit = oddValues[col];        // 扣非净利润
+                    quarters[qIdx].OperatingCashFlow = evenValues[col]; // 经营现金流
+                }
+            }
         }
 
         private int FindFirstPosition(string text, string pattern)

@@ -178,17 +178,20 @@ namespace PdfToMarkdown.Services
                 .Select(m => m.Value)
                 .ToList();
 
-            if (allNumbers.Count < 4)
+            if (allNumbers.Count < 8)
                 return false;
 
             // Determine column order 
-            int[] order = { 0, 1, 2, 3 }; // Q1, Q2, Q3, Q4
-            var q1Pos = Regex.Match(block.Text, @"第一季度|（1-3");
-            var q4Pos = Regex.Match(block.Text, @"第四季度|（10-12");
+            int[] colOrder = { 0, 1, 2, 3 }; // Q1, Q2, Q3, Q4
+            var q1Pos = Regex.Match(block.Text, @"第一季度|\(1-3|（1-3");
+            var q4Pos = Regex.Match(block.Text, @"第四季度|\(10-12|（10-12");
             if (q1Pos.Success && q4Pos.Success && q4Pos.Index < q1Pos.Index)
             {
-                order = new[] { 3, 2, 1, 0 };
+                colOrder = new[] { 3, 2, 1, 0 };
             }
+
+            // Detect interleaved vs row-major layout
+            bool isInterleaved = DetectInterleavedNumbers(allNumbers);
 
             // Extract title/heading
             var titleMatch = Regex.Match(block.Text, @"[一二三四五六七八九十]+、\s*\d{4}\s*年分季度主要财务数据");
@@ -204,7 +207,7 @@ namespace PdfToMarkdown.Services
 
             // Determine unit
             string unit = "";
-            if (block.Text.Contains("单位：元") || block.Text.Contains("单位:元"))
+            if (block.Text.Contains("单位：元") || block.Text.Contains("单位:元") || block.Text.Contains("单位：元币种"))
                 unit = "（单位：元）";
             else if (block.Text.Contains("单位：万元"))
                 unit = "（单位：万元）";
@@ -219,22 +222,131 @@ namespace PdfToMarkdown.Services
             sb.AppendLine("| 项目 | 第一季度（1-3月） | 第二季度（4-6月） | 第三季度（7-9月） | 第四季度（10-12月） |");
             sb.AppendLine("| --- | ---: | ---: | ---: | ---: |");
 
-            int numGroups = allNumbers.Count / 4;
-            for (int row = 0; row < Math.Min(numGroups, rowLabels.Length); row++)
+            if (isInterleaved)
             {
-                int baseIdx = row * 4;
-                if (baseIdx + 3 >= allNumbers.Count) break;
+                // Interleaved: 2 rows × 4 columns grouped together
+                // Pattern: R1_Q1, R2_Q1, R1_Q2, R2_Q2, R1_Q3, R2_Q3, R1_Q4, R2_Q4
+                // First group (8 numbers): 营业收入 + 净利润
+                // For first group: even positions are larger (revenue), odd are smaller (profit)
+                // Revenue = even indices, Profit = odd indices
+                {
+                    int baseIdx = 0;
+                    // Determine which positions (even/odd) are revenue vs profit
+                    // Revenue should always be larger than profit
+                    double avgEven = Enumerable.Range(0, 4).Select(c => Math.Abs(ParseNumber(allNumbers[baseIdx + c * 2]))).Average();
+                    double avgOdd = Enumerable.Range(0, 4).Select(c => Math.Abs(ParseNumber(allNumbers[baseIdx + c * 2 + 1]))).Average();
 
-                string q1Val = allNumbers[baseIdx + order[0]];
-                string q2Val = allNumbers[baseIdx + order[1]];
-                string q3Val = allNumbers[baseIdx + order[2]];
-                string q4Val = allNumbers[baseIdx + order[3]];
+                    int revenueOffset = avgEven >= avgOdd ? 0 : 1;
+                    int profitOffset = 1 - revenueOffset;
 
-                sb.AppendLine($"| {rowLabels[row]} | {q1Val} | {q2Val} | {q3Val} | {q4Val} |");
+                    string q1Rev = allNumbers[baseIdx + colOrder[0] * 2 + revenueOffset];
+                    string q2Rev = allNumbers[baseIdx + colOrder[1] * 2 + revenueOffset];
+                    string q3Rev = allNumbers[baseIdx + colOrder[2] * 2 + revenueOffset];
+                    string q4Rev = allNumbers[baseIdx + colOrder[3] * 2 + revenueOffset];
+                    sb.AppendLine($"| {rowLabels[0]} | {q1Rev} | {q2Rev} | {q3Rev} | {q4Rev} |");
+
+                    string q1Prof = allNumbers[baseIdx + colOrder[0] * 2 + profitOffset];
+                    string q2Prof = allNumbers[baseIdx + colOrder[1] * 2 + profitOffset];
+                    string q3Prof = allNumbers[baseIdx + colOrder[2] * 2 + profitOffset];
+                    string q4Prof = allNumbers[baseIdx + colOrder[3] * 2 + profitOffset];
+                    sb.AppendLine($"| {rowLabels[1]} | {q1Prof} | {q2Prof} | {q3Prof} | {q4Prof} |");
+
+                    // Second group (8 numbers): 扣非净利润 + 经营现金流
+                    // 扣非净利润 ≈ 净利润 in magnitude
+                    if (allNumbers.Count >= 16)
+                    {
+                        int baseIdx2 = 8;
+                        double avgEven2 = Enumerable.Range(0, 4).Select(c => Math.Abs(ParseNumber(allNumbers[baseIdx2 + c * 2]))).Average();
+                        double avgOdd2 = Enumerable.Range(0, 4).Select(c => Math.Abs(ParseNumber(allNumbers[baseIdx2 + c * 2 + 1]))).Average();
+                        double avgProfitAbs = Enumerable.Range(0, 4).Select(c => Math.Abs(ParseNumber(allNumbers[baseIdx + colOrder[c] * 2 + profitOffset]))).Average();
+
+                        // Which set is closer to profit magnitude? That's 扣非
+                        double evenRatio2 = avgEven2 > 0 && avgProfitAbs > 0 ? Math.Max(avgEven2 / avgProfitAbs, avgProfitAbs / avgEven2) : double.MaxValue;
+                        double oddRatio2 = avgOdd2 > 0 && avgProfitAbs > 0 ? Math.Max(avgOdd2 / avgProfitAbs, avgProfitAbs / avgOdd2) : double.MaxValue;
+
+                        int deductedOffset = evenRatio2 <= oddRatio2 ? 0 : 1;
+                        int cashFlowOffset = 1 - deductedOffset;
+
+                        string q1Ded = allNumbers[baseIdx2 + colOrder[0] * 2 + deductedOffset];
+                        string q2Ded = allNumbers[baseIdx2 + colOrder[1] * 2 + deductedOffset];
+                        string q3Ded = allNumbers[baseIdx2 + colOrder[2] * 2 + deductedOffset];
+                        string q4Ded = allNumbers[baseIdx2 + colOrder[3] * 2 + deductedOffset];
+                        sb.AppendLine($"| {rowLabels[2]} | {q1Ded} | {q2Ded} | {q3Ded} | {q4Ded} |");
+
+                        string q1Cf = allNumbers[baseIdx2 + colOrder[0] * 2 + cashFlowOffset];
+                        string q2Cf = allNumbers[baseIdx2 + colOrder[1] * 2 + cashFlowOffset];
+                        string q3Cf = allNumbers[baseIdx2 + colOrder[2] * 2 + cashFlowOffset];
+                        string q4Cf = allNumbers[baseIdx2 + colOrder[3] * 2 + cashFlowOffset];
+                        sb.AppendLine($"| {rowLabels[3]} | {q1Cf} | {q2Cf} | {q3Cf} | {q4Cf} |");
+                    }
+                }
+            }
+            else
+            {
+                // Row-major: 4 numbers per metric row
+                int numGroups = allNumbers.Count / 4;
+                for (int row = 0; row < Math.Min(numGroups, rowLabels.Length); row++)
+                {
+                    int baseIdx = row * 4;
+                    if (baseIdx + 3 >= allNumbers.Count) break;
+
+                    string q1Val = allNumbers[baseIdx + colOrder[0]];
+                    string q2Val = allNumbers[baseIdx + colOrder[1]];
+                    string q3Val = allNumbers[baseIdx + colOrder[2]];
+                    string q4Val = allNumbers[baseIdx + colOrder[3]];
+
+                    sb.AppendLine($"| {rowLabels[row]} | {q1Val} | {q2Val} | {q3Val} | {q4Val} |");
+                }
             }
 
             sb.AppendLine();
             return true;
+        }
+
+        /// <summary>
+        /// Detects if the first 8 numbers are interleaved (alternating between two magnitude levels).
+        /// </summary>
+        private bool DetectInterleavedNumbers(List<string> allNumbers)
+        {
+            if (allNumbers.Count < 8) return false;
+
+            var values = allNumbers.Take(8)
+                .Select(n => Math.Abs(ParseNumber(n)))
+                .ToList();
+
+            // Check row-major: are first 4 numbers of similar magnitude?
+            double maxFirst4 = values.Take(4).Max();
+            double minFirst4 = values.Take(4).Where(v => v > 0).DefaultIfEmpty(1).Min();
+            if (maxFirst4 > 0 && minFirst4 > 0 && maxFirst4 / minFirst4 < 10)
+                return false; // row-major
+
+            // Check interleaved: even indices (0,2,4,6) similar AND odd indices (1,3,5,7) similar
+            var evenValues = new[] { values[0], values[2], values[4], values[6] };
+            var oddValues = new[] { values[1], values[3], values[5], values[7] };
+
+            double maxEven = evenValues.Max();
+            double minEven = evenValues.Where(v => v > 0).DefaultIfEmpty(1).Min();
+            double maxOdd = oddValues.Max();
+            double minOdd = oddValues.Where(v => v > 0).DefaultIfEmpty(1).Min();
+
+            bool evenSimilar = maxEven > 0 && minEven > 0 && maxEven / minEven < 10;
+            bool oddSimilar = maxOdd > 0 && minOdd > 0 && maxOdd / minOdd < 10;
+
+            double avgEven = evenValues.Where(v => v > 0).DefaultIfEmpty(0).Average();
+            double avgOdd = oddValues.Where(v => v > 0).DefaultIfEmpty(0).Average();
+            bool differentMagnitude = avgEven > 0 && avgOdd > 0 &&
+                (avgEven / avgOdd > 5 || avgOdd / avgEven > 5);
+
+            return evenSimilar && oddSimilar && differentMagnitude;
+        }
+
+        private double ParseNumber(string text)
+        {
+            text = text.Replace(",", "").Trim();
+            if (double.TryParse(text, System.Globalization.NumberStyles.Any, 
+                System.Globalization.CultureInfo.InvariantCulture, out double result))
+                return result;
+            return 0;
         }
     }
 }
