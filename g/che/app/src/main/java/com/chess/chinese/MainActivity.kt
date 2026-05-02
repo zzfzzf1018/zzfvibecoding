@@ -2,13 +2,10 @@ package com.chess.chinese
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.TextView
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.chess.chinese.game.AIDifficulty
-import com.chess.chinese.game.GameMode
+import com.chess.chinese.game.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -18,12 +15,15 @@ class MainActivity : AppCompatActivity() {
 
         val btnPvP = findViewById<Button>(R.id.btn_pvp)
         val btnPvE = findViewById<Button>(R.id.btn_pve)
+        val btnPuzzle = findViewById<Button>(R.id.btn_puzzle)
+        val btnLoad = findViewById<Button>(R.id.btn_load)
         val rgDifficulty = findViewById<RadioGroup>(R.id.rg_difficulty)
-        val tvTitle = findViewById<TextView>(R.id.tv_title)
+        val cbAutoFlip = findViewById<CheckBox>(R.id.cb_auto_flip)
 
         btnPvP.setOnClickListener {
             val intent = Intent(this, GameActivity::class.java)
             intent.putExtra("game_mode", GameMode.PVP.name)
+            intent.putExtra("auto_flip", cbAutoFlip.isChecked)
             startActivity(intent)
         }
 
@@ -38,5 +38,51 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("difficulty", difficulty.name)
             startActivity(intent)
         }
+
+        btnPuzzle.setOnClickListener {
+            showPuzzleDialog()
+        }
+
+        btnLoad.setOnClickListener {
+            showLoadDialog()
+        }
+    }
+
+    private fun showPuzzleDialog() {
+        val puzzles = PuzzleManager.getPuzzles()
+        val names = puzzles.map { "${it.name} - ${it.description}" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择残局")
+            .setItems(names) { _, which ->
+                val intent = Intent(this, GameActivity::class.java)
+                intent.putExtra("game_mode", GameMode.PUZZLE.name)
+                intent.putExtra("puzzle_index", which)
+                intent.putExtra("difficulty", AIDifficulty.HARD.name)
+                startActivity(intent)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showLoadDialog() {
+        val saveManager = SaveManager(this)
+        val saves = saveManager.getSaveList()
+        if (saves.isEmpty()) {
+            Toast.makeText(this, "没有存档记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = saves.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择存档")
+            .setItems(names) { _, which ->
+                val save = saves[which]
+                val intent = Intent(this, GameActivity::class.java)
+                intent.putExtra("game_mode", save.gameMode)
+                intent.putExtra("difficulty", save.difficulty)
+                intent.putExtra("load_save_id", save.id)
+                startActivity(intent)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 }

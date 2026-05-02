@@ -11,7 +11,7 @@
         android:id="@+id/tv_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="48dp"
+        android:layout_marginBottom="32dp"
         android:text="中 国 象 棋"
         android:textColor="#8B0000"
         android:textSize="36sp"
@@ -20,18 +20,26 @@
     <Button
         android:id="@+id/btn_pvp"
         android:layout_width="240dp"
-        android:layout_height="56dp"
-        android:layout_marginBottom="16dp"
+        android:layout_height="52dp"
+        android:layout_marginBottom="12dp"
         android:backgroundTint="#CC0000"
         android:text="双人对战"
         android:textColor="#FFFFFF"
         android:textSize="18sp" />
 
+    <CheckBox
+        android:id="@+id/cb_auto_flip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="双人对战时自动翻转棋盘"
+        android:textSize="14sp" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"
         android:text="AI 难度设置"
         android:textColor="#333333"
         android:textSize="16sp" />
@@ -40,7 +48,7 @@
         android:id="@+id/rg_difficulty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="12dp"
         android:orientation="horizontal">
 
         <RadioButton
@@ -71,10 +79,29 @@
     <Button
         android:id="@+id/btn_pve"
         android:layout_width="240dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="52dp"
+        android:layout_marginBottom="12dp"
         android:backgroundTint="#1A5276"
         android:text="人机对战"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btn_puzzle"
+        android:layout_width="240dp"
+        android:layout_height="52dp"
+        android:layout_marginBottom="12dp"
+        android:backgroundTint="#2E7D32"
+        android:text="残局挑战"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btn_load"
+        android:layout_width="240dp"
+        android:layout_height="52dp"
+        android:backgroundTint="#6A1B9A"
+        android:text="读取存档"
         android:textColor="#FFFFFF"
         android:textSize="18sp" />
 

@@ -1,11 +1,22 @@
 package com.chess.chinese.game
 
 /**
+ * 走棋事件类型（用于音效和动画）
+ */
+enum class MoveEventType {
+    MOVE,       // 普通走子
+    CAPTURE,    // 吃子
+    CHECK,      // 将军
+    CHECKMATE   // 将杀
+}
+
+/**
  * 游戏模式
  */
 enum class GameMode {
-    PVP,  // 双人对战
-    PVE   // 人机对战
+    PVP,    // 双人对战
+    PVE,    // 人机对战
+    PUZZLE  // 残局模式
 }
 
 /**
@@ -28,7 +39,9 @@ class GameManager(
 ) {
     val board = ChessBoard()
     val rules = ChessRules()
+    val notationRecorder = NotationRecorder()
     private var ai: ChessAI? = null
+    private val openingBook = OpeningBook()
 
     var currentTurn: PieceColor = PieceColor.RED
         private set
@@ -42,16 +55,38 @@ class GameManager(
         private set
 
     private val moveHistory = mutableListOf<Move>()
+    private var moveCount = 0
 
     // 回调
     var onBoardChanged: (() -> Unit)? = null
     var onGameOver: ((GameState) -> Unit)? = null
     var onAIThinking: ((Boolean) -> Unit)? = null
+    var onMoveEvent: ((MoveEventType, Move) -> Unit)? = null
+    var onNotationAdded: ((String) -> Unit)? = null
 
     init {
-        if (gameMode == GameMode.PVE) {
+        if (gameMode == GameMode.PVE || gameMode == GameMode.PUZZLE) {
             ai = ChessAI(difficulty)
         }
+    }
+
+    fun getMoveHistory(): List<Move> = moveHistory.toList()
+
+    fun getMoveCount(): Int = moveCount
+
+    /**
+     * 加载状态（用于读档）
+     */
+    fun loadState(turn: PieceColor, moves: List<Move>) {
+        currentTurn = turn
+        moveHistory.clear()
+        moveHistory.addAll(moves)
+        moveCount = moves.size
+        lastMove = moves.lastOrNull()
+        gameState = GameState.PLAYING
+        selectedRow = -1
+        selectedCol = -1
+        onBoardChanged?.invoke()
     }
 
     /**
@@ -60,21 +95,19 @@ class GameManager(
     fun onCellClicked(row: Int, col: Int) {
         if (gameState != GameState.PLAYING) return
         if (gameMode == GameMode.PVE && currentTurn != playerColor) return
+        if (gameMode == GameMode.PUZZLE && currentTurn != playerColor) return
 
         val piece = board.getPiece(row, col)
 
         if (selectedRow >= 0 && selectedCol >= 0) {
-            // 已选中棋子，尝试移动
             val selectedPiece = board.getPiece(selectedRow, selectedCol)
             if (selectedPiece != null && piece != null && piece.color == selectedPiece.color) {
-                // 重新选择己方棋子
                 selectedRow = row
                 selectedCol = col
                 onBoardChanged?.invoke()
                 return
             }
 
-            // 尝试走子
             val move = Move(selectedRow, selectedCol, row, col, piece)
             if (tryMove(move)) {
                 selectedRow = -1
@@ -82,18 +115,16 @@ class GameManager(
                 onBoardChanged?.invoke()
                 checkGameState()
 
-                // AI回合
-                if (gameMode == GameMode.PVE && gameState == GameState.PLAYING && currentTurn != playerColor) {
+                if ((gameMode == GameMode.PVE || gameMode == GameMode.PUZZLE) &&
+                    gameState == GameState.PLAYING && currentTurn != playerColor) {
                     makeAIMove()
                 }
             } else {
-                // 非法走法，取消选中
                 selectedRow = -1
                 selectedCol = -1
                 onBoardChanged?.invoke()
             }
         } else {
-            // 选择棋子
             if (piece != null && piece.color == currentTurn) {
                 selectedRow = row
                 selectedCol = col
@@ -103,28 +134,50 @@ class GameManager(
     }
 
     /**
+     * 获取AI提示（玩家可用）
+     */
+    fun getHint(): Move? {
+        if (gameState != GameState.PLAYING) return null
+        val hintAI = ChessAI(AIDifficulty.HARD)
+        val boardCopy = board.clone()
+        return hintAI.getBestMove(boardCopy, currentTurn)
+    }
+
+    /**
      * 尝试执行走法
      */
     private fun tryMove(move: Move): Boolean {
         val piece = board.getPiece(move.fromRow, move.fromCol) ?: return false
         if (piece.color != currentTurn) return false
 
-        // 检查是否是合法走法
         val legalMoves = rules.generateMovesForPiece(board, move.fromRow, move.fromCol)
         val matchingMove = legalMoves.find { it.toRow == move.toRow && it.toCol == move.toCol }
             ?: return false
 
-        // 检查走完后是否会被将军
         if (!rules.isMoveLegal(board, matchingMove, currentTurn)) return false
+
+        // 记录棋谱
+        val notation = notationRecorder.recordMove(board, matchingMove, piece)
+        onNotationAdded?.invoke(notation)
 
         // 执行走法
         val captured = board.movePiece(matchingMove)
         val recordedMove = Move(move.fromRow, move.fromCol, move.toRow, move.toCol, captured)
         moveHistory.add(recordedMove)
         lastMove = recordedMove
+        moveCount++
 
-        // 切换回合
-        currentTurn = if (currentTurn == PieceColor.RED) PieceColor.BLACK else PieceColor.RED
+        // 判断事件类型
+        val opponentColor = if (currentTurn == PieceColor.RED) PieceColor.BLACK else PieceColor.RED
+        val eventType = when {
+            rules.isCheckmate(board, opponentColor) -> MoveEventType.CHECKMATE
+            rules.isKingInCheck(board, opponentColor) -> MoveEventType.CHECK
+            captured != null -> MoveEventType.CAPTURE
+            else -> MoveEventType.MOVE
+        }
+        onMoveEvent?.invoke(eventType, recordedMove)
+
+        currentTurn = opponentColor
         return true
     }
 
@@ -134,15 +187,48 @@ class GameManager(
     private fun makeAIMove() {
         onAIThinking?.invoke(true)
         Thread {
-            // 使用棋盘副本进行AI搜索，避免与UI线程产生竞争条件
-            val boardCopy = board.clone()
-            val aiMove = ai?.getBestMove(boardCopy, currentTurn)
+            // 先尝试开局库
+            var aiMove: Move? = null
+            if (gameMode == GameMode.PVE) {
+                aiMove = openingBook.getOpeningMove(moveCount, currentTurn)
+                if (aiMove != null) {
+                    val piece = board.getPiece(aiMove.fromRow, aiMove.fromCol)
+                    if (piece == null || piece.color != currentTurn) {
+                        aiMove = null
+                    } else if (!rules.isMoveLegal(board, aiMove, currentTurn)) {
+                        aiMove = null
+                    }
+                }
+            }
+
+            if (aiMove == null) {
+                val boardCopy = board.clone()
+                aiMove = ai?.getBestMove(boardCopy, currentTurn)
+            }
+
             if (aiMove != null) {
+                val piece = board.getPiece(aiMove.fromRow, aiMove.fromCol)
+                if (piece != null) {
+                    val notation = notationRecorder.recordMove(board, aiMove, piece)
+                    onNotationAdded?.invoke(notation)
+                }
+
                 val captured = board.movePiece(aiMove)
                 val recordedMove = Move(aiMove.fromRow, aiMove.fromCol, aiMove.toRow, aiMove.toCol, captured)
                 moveHistory.add(recordedMove)
                 lastMove = recordedMove
-                currentTurn = if (currentTurn == PieceColor.RED) PieceColor.BLACK else PieceColor.RED
+                moveCount++
+
+                val opponentColor = if (currentTurn == PieceColor.RED) PieceColor.BLACK else PieceColor.RED
+                val eventType = when {
+                    rules.isCheckmate(board, opponentColor) -> MoveEventType.CHECKMATE
+                    rules.isKingInCheck(board, opponentColor) -> MoveEventType.CHECK
+                    captured != null -> MoveEventType.CAPTURE
+                    else -> MoveEventType.MOVE
+                }
+                onMoveEvent?.invoke(eventType, recordedMove)
+
+                currentTurn = opponentColor
             }
             onAIThinking?.invoke(false)
             onBoardChanged?.invoke()
@@ -150,9 +236,6 @@ class GameManager(
         }.start()
     }
 
-    /**
-     * 检查游戏状态
-     */
     private fun checkGameState() {
         if (rules.isCheckmate(board, currentTurn)) {
             gameState = if (currentTurn == PieceColor.RED) GameState.BLACK_WIN else GameState.RED_WIN
@@ -160,21 +243,20 @@ class GameManager(
         }
     }
 
-    /**
-     * 悔棋
-     */
     fun undoMove(): Boolean {
         if (moveHistory.isEmpty()) return false
         if (gameState != GameState.PLAYING) return false
 
-        // 人机模式需要撤销两步
-        val stepsToUndo = if (gameMode == GameMode.PVE && moveHistory.size >= 2) 2 else 1
+        val stepsToUndo = if ((gameMode == GameMode.PVE || gameMode == GameMode.PUZZLE)
+            && moveHistory.size >= 2) 2 else 1
 
         repeat(stepsToUndo) {
             if (moveHistory.isNotEmpty()) {
                 val lastMoveRecord = moveHistory.removeAt(moveHistory.size - 1)
                 board.undoMove(lastMoveRecord)
                 currentTurn = if (currentTurn == PieceColor.RED) PieceColor.BLACK else PieceColor.RED
+                moveCount--
+                notationRecorder.removeLast()
             }
         }
 
@@ -185,9 +267,6 @@ class GameManager(
         return true
     }
 
-    /**
-     * 重新开始
-     */
     fun restart() {
         board.initBoard()
         currentTurn = PieceColor.RED
@@ -196,12 +275,11 @@ class GameManager(
         selectedCol = -1
         lastMove = null
         moveHistory.clear()
+        moveCount = 0
+        notationRecorder.clear()
         onBoardChanged?.invoke()
     }
 
-    /**
-     * 获取选中棋子的合法走法目标位置
-     */
     fun getValidMoveTargets(): List<Pair<Int, Int>> {
         if (selectedRow < 0 || selectedCol < 0) return emptyList()
         val moves = rules.generateMovesForPiece(board, selectedRow, selectedCol)
