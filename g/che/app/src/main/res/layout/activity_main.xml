@@ -97,6 +97,16 @@
         android:textSize="18sp" />
 
     <Button
+        android:id="@+id/btn_bluetooth"
+        android:layout_width="240dp"
+        android:layout_height="52dp"
+        android:layout_marginBottom="12dp"
+        android:backgroundTint="#0277BD"
+        android:text="蓝牙对战"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <Button
         android:id="@+id/btn_load"
         android:layout_width="240dp"
         android:layout_height="52dp"

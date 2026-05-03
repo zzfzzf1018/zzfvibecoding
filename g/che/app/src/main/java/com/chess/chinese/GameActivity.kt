@@ -53,10 +53,15 @@ class GameActivity : AppCompatActivity() {
         val difficulty = AIDifficulty.valueOf(intent.getStringExtra("difficulty") ?: AIDifficulty.MEDIUM.name)
         autoFlip = intent.getBooleanExtra("auto_flip", false)
 
+        // 蓝牙模式：决定执子颜色
+        val playerColor = if (gameMode == GameMode.BLUETOOTH) {
+            PieceColor.valueOf(intent.getStringExtra("player_color") ?: PieceColor.RED.name)
+        } else PieceColor.RED
+
         // 残局模式
         val puzzleIndex = intent.getIntExtra("puzzle_index", -1)
 
-        gameManager = GameManager(gameMode, difficulty)
+        gameManager = GameManager(gameMode, difficulty, playerColor)
 
         if (puzzleIndex >= 0) {
             val puzzles = PuzzleManager.getPuzzles()
@@ -88,8 +93,107 @@ class GameActivity : AppCompatActivity() {
         setupButtons()
         updateStatus()
 
+        // 蓝牙模式初始化
+        if (gameMode == GameMode.BLUETOOTH) {
+            setupBluetooth()
+            // 蓝牙模式下如果执黑，翻转棋盘
+            if (playerColor == PieceColor.BLACK) {
+                boardView.isFlipped = true
+            }
+            // 隐藏不需要的按钮
+            btnSave.visibility = View.GONE
+        }
+
         // 人机模式隐藏提示按钮（可以用来请求AI建议）
         btnHint.visibility = if (gameMode == GameMode.PVP) View.VISIBLE else View.VISIBLE
+    }
+
+    private fun setupBluetooth() {
+        val btService = BluetoothActivity.bluetoothService ?: return
+
+        // 本地走棋后发送给对方
+        gameManager.onLocalMove = { move ->
+            btService.sendMove(move.fromRow, move.fromCol, move.toRow, move.toCol)
+        }
+
+        // 收到对方消息
+        btService.onMessageReceived = { message ->
+            runOnUiThread { handleBluetoothMessage(message) }
+        }
+
+        btService.onError = { error ->
+            runOnUiThread {
+                Toast.makeText(this, "蓝牙: $error", Toast.LENGTH_SHORT).show()
+                if (btService.state == BluetoothGameService.STATE_NONE) {
+                    tvStatus.text = "蓝牙连接已断开"
+                }
+            }
+        }
+    }
+
+    private fun handleBluetoothMessage(message: String) {
+        when {
+            message.startsWith(BluetoothGameService.MSG_MOVE + ":") -> {
+                val parts = message.substringAfter(":").split(",")
+                if (parts.size == 4) {
+                    val fromRow = parts[0].toIntOrNull() ?: return
+                    val fromCol = parts[1].toIntOrNull() ?: return
+                    val toRow = parts[2].toIntOrNull() ?: return
+                    val toCol = parts[3].toIntOrNull() ?: return
+                    gameManager.applyRemoteMove(fromRow, fromCol, toRow, toCol)
+                }
+            }
+            message == BluetoothGameService.MSG_UNDO_REQ -> {
+                AlertDialog.Builder(this)
+                    .setTitle("悔棋请求")
+                    .setMessage("对方请求悔棋，是否同意？")
+                    .setPositiveButton("同意") { _, _ ->
+                        BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_UNDO_OK)
+                        gameManager.undoMove()
+                    }
+                    .setNegativeButton("拒绝") { _, _ ->
+                        BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_UNDO_NO)
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            message == BluetoothGameService.MSG_UNDO_OK -> {
+                gameManager.undoMove()
+                Toast.makeText(this, "对方同意悔棋", Toast.LENGTH_SHORT).show()
+            }
+            message == BluetoothGameService.MSG_UNDO_NO -> {
+                Toast.makeText(this, "对方拒绝悔棋", Toast.LENGTH_SHORT).show()
+            }
+            message == BluetoothGameService.MSG_RESTART_REQ -> {
+                AlertDialog.Builder(this)
+                    .setTitle("重开请求")
+                    .setMessage("对方请求重新开始，是否同意？")
+                    .setPositiveButton("同意") { _, _ ->
+                        BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_RESTART_OK)
+                        gameManager.restart()
+                        tvNotation.text = ""
+                    }
+                    .setNegativeButton("拒绝") { _, _ ->
+                        BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_RESTART_NO)
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+            message == BluetoothGameService.MSG_RESTART_OK -> {
+                gameManager.restart()
+                tvNotation.text = ""
+                Toast.makeText(this, "对方同意重开", Toast.LENGTH_SHORT).show()
+            }
+            message == BluetoothGameService.MSG_RESTART_NO -> {
+                Toast.makeText(this, "对方拒绝重开", Toast.LENGTH_SHORT).show()
+            }
+            message == BluetoothGameService.MSG_RESIGN -> {
+                Toast.makeText(this, "对方认输！", Toast.LENGTH_SHORT).show()
+                val winState = if (gameManager.playerColor == PieceColor.RED)
+                    GameState.RED_WIN else GameState.BLACK_WIN
+                showGameOverDialog(if (winState == GameState.RED_WIN) "红方胜利！" else "黑方胜利！")
+            }
+        }
     }
 
     private fun setupCallbacks() {
@@ -153,25 +257,49 @@ class GameActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         btnUndo.setOnClickListener {
-            if (!gameManager.undoMove()) {
-                Toast.makeText(this, "无法悔棋", Toast.LENGTH_SHORT).show()
+            if (gameManager.gameMode == GameMode.BLUETOOTH) {
+                // 蓝牙模式需要请求对方同意
+                BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_UNDO_REQ)
+                Toast.makeText(this, "已发送悔棋请求", Toast.LENGTH_SHORT).show()
+            } else {
+                if (!gameManager.undoMove()) {
+                    Toast.makeText(this, "无法悔棋", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
         btnRestart.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("重新开始")
-                .setMessage("确定要重新开始吗？")
-                .setPositiveButton("确定") { _, _ ->
-                    gameManager.restart()
-                    tvNotation.text = ""
-                }
-                .setNegativeButton("取消", null)
-                .show()
+            if (gameManager.gameMode == GameMode.BLUETOOTH) {
+                BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_RESTART_REQ)
+                Toast.makeText(this, "已发送重开请求", Toast.LENGTH_SHORT).show()
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("重新开始")
+                    .setMessage("确定要重新开始吗？")
+                    .setPositiveButton("确定") { _, _ ->
+                        gameManager.restart()
+                        tvNotation.text = ""
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
         }
 
         btnBack.setOnClickListener {
-            finish()
+            if (gameManager.gameMode == GameMode.BLUETOOTH) {
+                AlertDialog.Builder(this)
+                    .setTitle("退出对局")
+                    .setMessage("退出将断开蓝牙连接，确定？")
+                    .setPositiveButton("确定") { _, _ ->
+                        BluetoothActivity.bluetoothService?.sendMessage(BluetoothGameService.MSG_RESIGN)
+                        BluetoothActivity.bluetoothService?.stop()
+                        finish()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            } else {
+                finish()
+            }
         }
 
         btnHint.setOnClickListener {

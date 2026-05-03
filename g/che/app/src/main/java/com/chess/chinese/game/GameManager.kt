@@ -14,9 +14,10 @@ enum class MoveEventType {
  * 游戏模式
  */
 enum class GameMode {
-    PVP,    // 双人对战
-    PVE,    // 人机对战
-    PUZZLE  // 残局模式
+    PVP,        // 双人对战
+    PVE,        // 人机对战
+    PUZZLE,     // 残局模式
+    BLUETOOTH   // 蓝牙对战
 }
 
 /**
@@ -63,6 +64,7 @@ class GameManager(
     var onAIThinking: ((Boolean) -> Unit)? = null
     var onMoveEvent: ((MoveEventType, Move) -> Unit)? = null
     var onNotationAdded: ((String) -> Unit)? = null
+    var onLocalMove: ((Move) -> Unit)? = null  // 蓝牙模式：本地走棋后通知发送
 
     init {
         if (gameMode == GameMode.PVE || gameMode == GameMode.PUZZLE) {
@@ -96,6 +98,7 @@ class GameManager(
         if (gameState != GameState.PLAYING) return
         if (gameMode == GameMode.PVE && currentTurn != playerColor) return
         if (gameMode == GameMode.PUZZLE && currentTurn != playerColor) return
+        if (gameMode == GameMode.BLUETOOTH && currentTurn != playerColor) return
 
         val piece = board.getPiece(row, col)
 
@@ -110,6 +113,10 @@ class GameManager(
 
             val move = Move(selectedRow, selectedCol, row, col, piece)
             if (tryMove(move)) {
+                // 蓝牙模式：走棋成功后通知远端
+                if (gameMode == GameMode.BLUETOOTH) {
+                    onLocalMove?.invoke(Move(move.fromRow, move.fromCol, row, col, null))
+                }
                 selectedRow = -1
                 selectedCol = -1
                 onBoardChanged?.invoke()
@@ -129,6 +136,26 @@ class GameManager(
                 selectedRow = row
                 selectedCol = col
                 onBoardChanged?.invoke()
+            }
+        }
+    }
+
+    /**
+     * 应用远端走棋（蓝牙对战收到对方走法）
+     */
+    fun applyRemoteMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int): Boolean {
+        if (gameState != GameState.PLAYING) return false
+        if (gameMode != GameMode.BLUETOOTH) return false
+        if (currentTurn == playerColor) return false  // 不是对方回合
+
+        val captured = board.getPiece(toRow, toCol)
+        val move = Move(fromRow, fromCol, toRow, toCol, captured)
+        return tryMove(move).also {
+            if (it) {
+                selectedRow = -1
+                selectedCol = -1
+                onBoardChanged?.invoke()
+                checkGameState()
             }
         }
     }

@@ -17,6 +17,7 @@ class MainActivity : AppCompatActivity() {
         val btnPvE = findViewById<Button>(R.id.btn_pve)
         val btnPuzzle = findViewById<Button>(R.id.btn_puzzle)
         val btnLoad = findViewById<Button>(R.id.btn_load)
+        val btnBluetooth = findViewById<Button>(R.id.btn_bluetooth)
         val rgDifficulty = findViewById<RadioGroup>(R.id.rg_difficulty)
         val cbAutoFlip = findViewById<CheckBox>(R.id.cb_auto_flip)
 
@@ -45,6 +46,11 @@ class MainActivity : AppCompatActivity() {
 
         btnLoad.setOnClickListener {
             showLoadDialog()
+        }
+
+        btnBluetooth.setOnClickListener {
+            val intent = Intent(this, BluetoothActivity::class.java)
+            startActivity(intent)
         }
     }
 
