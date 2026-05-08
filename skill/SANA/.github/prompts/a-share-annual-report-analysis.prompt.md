@@ -25,11 +25,17 @@ model: "GPT-5 (copilot)"
 4. 不要照抄原文。每个重要结论都要写清数据依据、经营含义，以及是否存在一次性因素。
 5. 如果缺少估值、同行或 ROE 计算所需数据，明确列出缺口，不要编造。
 6. 如果我明确说“摘要版”或“券商风格”，优先按短版纪要方式输出；如果我明确说“同行对比”，优先展开可比公司横向表格。
+7. 如果我明确说“买方纪要”或“投研纪要”，优先突出预期差、市场分歧、催化剂、下行风险和后续跟踪点。
 
 输出格式优先参考：
 - [Skill 入口](../skills/a-share-annual-report-analysis/SKILL.md)
 - [分析框架](../skills/a-share-annual-report-analysis/references/analysis-framework.md)
 - [输出模板](../skills/a-share-annual-report-analysis/assets/output-template.md)
 - [券商风格摘要模板](../skills/a-share-annual-report-analysis/assets/broker-summary-template.md)
+- [买方投研纪要模板](../skills/a-share-annual-report-analysis/assets/buy-side-memo-template.md)
 - [同行对比模板](../skills/a-share-annual-report-analysis/assets/peer-comparison-template.md)
 - [虚构案例](../skills/a-share-annual-report-analysis/references/example-case.md)
+- [预期差案例](../skills/a-share-annual-report-analysis/references/buy-side-expectation-gap-case.md)
+- [制造业预期差案例](../skills/a-share-annual-report-analysis/references/buy-side-manufacturing-case.md)
+- [消费预期差案例](../skills/a-share-annual-report-analysis/references/buy-side-consumer-case.md)
+- [医药预期差案例](../skills/a-share-annual-report-analysis/references/buy-side-healthcare-case.md)

@@ -8,8 +8,19 @@
 - 分析框架：[.github/skills/a-share-annual-report-analysis/references/analysis-framework.md](.github/skills/a-share-annual-report-analysis/references/analysis-framework.md)
 - 输出模板：[.github/skills/a-share-annual-report-analysis/assets/output-template.md](.github/skills/a-share-annual-report-analysis/assets/output-template.md)
 - 券商风格摘要模板：[.github/skills/a-share-annual-report-analysis/assets/broker-summary-template.md](.github/skills/a-share-annual-report-analysis/assets/broker-summary-template.md)
+- 买方投研纪要模板：[.github/skills/a-share-annual-report-analysis/assets/buy-side-memo-template.md](.github/skills/a-share-annual-report-analysis/assets/buy-side-memo-template.md)
 - 行业化同行对比模板：[.github/skills/a-share-annual-report-analysis/assets/peer-comparison-template.md](.github/skills/a-share-annual-report-analysis/assets/peer-comparison-template.md)
 - 示例案例：[.github/skills/a-share-annual-report-analysis/references/example-case.md](.github/skills/a-share-annual-report-analysis/references/example-case.md)
+- 预期差案例示例：[.github/skills/a-share-annual-report-analysis/references/buy-side-expectation-gap-case.md](.github/skills/a-share-annual-report-analysis/references/buy-side-expectation-gap-case.md)
+- 制造业买方案例：[.github/skills/a-share-annual-report-analysis/references/buy-side-manufacturing-case.md](.github/skills/a-share-annual-report-analysis/references/buy-side-manufacturing-case.md)
+- 消费买方案例：[.github/skills/a-share-annual-report-analysis/references/buy-side-consumer-case.md](.github/skills/a-share-annual-report-analysis/references/buy-side-consumer-case.md)
+- 医药买方案例：[.github/skills/a-share-annual-report-analysis/references/buy-side-healthcare-case.md](.github/skills/a-share-annual-report-analysis/references/buy-side-healthcare-case.md)
+- PDF 输入指南：[.github/skills/a-share-annual-report-analysis/references/pdf-input-guide.md](.github/skills/a-share-annual-report-analysis/references/pdf-input-guide.md)
+- PDF 抽取脚本：[.github/skills/a-share-annual-report-analysis/scripts/extract_report_pdf.py](.github/skills/a-share-annual-report-analysis/scripts/extract_report_pdf.py)
+- PDF OCR 指南：[.github/skills/a-share-annual-report-analysis/references/pdf-ocr-guide.md](.github/skills/a-share-annual-report-analysis/references/pdf-ocr-guide.md)
+- PDF OCR 脚本：[.github/skills/a-share-annual-report-analysis/scripts/ocr_report_pdf.py](.github/skills/a-share-annual-report-analysis/scripts/ocr_report_pdf.py)
+- 年报下载指南：[.github/skills/a-share-annual-report-analysis/references/report-download-guide.md](.github/skills/a-share-annual-report-analysis/references/report-download-guide.md)
+- 年报下载脚本：[.github/skills/a-share-annual-report-analysis/scripts/download_cninfo_report.py](.github/skills/a-share-annual-report-analysis/scripts/download_cninfo_report.py)
 - 快速调用 Prompt：[.github/prompts/a-share-annual-report-analysis.prompt.md](.github/prompts/a-share-annual-report-analysis.prompt.md)
 
 ## 能分析什么
@@ -49,6 +60,7 @@ Prompt 会要求模型按固定模块输出，包括：
 - 风险与最终判断
 
 如果你只想要适合晨会、路演纪要或卖方点评的短版结果，可以直接要求“券商风格摘要版”；如果你重点想看横向比较，可以直接要求“同行对比版”。
+如果你更关心市场是否低估、核心预期差在哪里、什么因素会触发重估，可以直接要求“买方投研纪要版”。
 
 ## 建议输入材料
 
@@ -59,12 +71,61 @@ Prompt 会要求模型按固定模块输出，包括：
 3. 管理层讨论与分析、分产品分地区收入、毛利率表
 4. 市值、股价、总股本、同行公司列表
 
+## PDF 自动抽取
+
+如果你拿到的是本地 PDF 年报，可以先用脚本自动抽取：
+
+1. 文字内容
+2. 页面级关键字命中位置
+3. PDF 中能识别出的表格 CSV
+
+优先查看：[.github/skills/a-share-annual-report-analysis/references/pdf-input-guide.md](.github/skills/a-share-annual-report-analysis/references/pdf-input-guide.md)
+
+脚本位置：
+
+- [.github/skills/a-share-annual-report-analysis/scripts/extract_report_pdf.py](.github/skills/a-share-annual-report-analysis/scripts/extract_report_pdf.py)
+
+适用场景：
+
+- 文本型 PDF 年报
+- 需要先定位三大表、管理层讨论、分产品分地区表页码
+- 需要把 PDF 内容转成更方便喂给 Copilot 的 Markdown 和 CSV
+
+限制：
+
+- 扫描版 PDF 仍建议先 OCR
+- 复杂跨页表格可能需要手工复核
+- 图片、图表和图注不会完整还原成结构化数据
+
+## 扫描版 PDF OCR
+
+如果 PDF 是扫描版，或复制出来的文字严重乱码，可以先走 OCR：
+
+1. 把 PDF 渲染成页面图像
+2. 对每一页做 OCR 识别
+3. 输出按页文本和关键字命中页码
+
+优先查看：[.github/skills/a-share-annual-report-analysis/references/pdf-ocr-guide.md](.github/skills/a-share-annual-report-analysis/references/pdf-ocr-guide.md)
+
+## 按股票代码自动下载年报
+
+如果你手头没有 PDF，只有股票代码和年份，可以先尝试自动下载：
+
+1. 按股票代码和年份查询巨潮公告列表
+2. 过滤“年度报告”相关公告
+3. 自动下载 PDF 到本地目录
+
+优先查看：[.github/skills/a-share-annual-report-analysis/references/report-download-guide.md](.github/skills/a-share-annual-report-analysis/references/report-download-guide.md)
+
 ## 注意事项
 
 - 不提供的数据不会被编造，缺口会被单独标注。
 - 半年报和三季报通常要先拆成单季度，不能直接拿累计值比较环比。
 - 估值与同行对比依赖市场数据，若未提供则只能做定性判断。
 - 制造业、消费、医药的横向比较指标差异很大，同行对比模板已按行业拆开，不建议混用一套表头。
+- PDF 自动抽取能明显减少手工整理，但抽取后的数字和表格仍建议抽样复核。
+- OCR 对扫描质量敏感，低清晰度 PDF 的数字仍可能识别错。
+- 自动下载依赖公告站点接口和命名规则，若下载失败可回退到手工提供 PDF 或公告链接。
 
 ## 后续可扩展方向
 

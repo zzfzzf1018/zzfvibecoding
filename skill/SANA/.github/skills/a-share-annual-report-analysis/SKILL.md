@@ -21,22 +21,29 @@ user-invocable: true
 
 优先提供以下任一组合：
 
+- 年报或季报 PDF 文件
 - 年报全文或主要章节
 - 最近三年年报、最近四个季度季报/业绩快报
 - 整理后的财务表格数据
 - 管理层讨论与分析、主营业务分部信息、前五大客户或供应商信息
 
 如果用户没有提供完整数据，先说明缺口，再基于已有材料完成可验证部分，不要编造数据。
+如果用户提供的是本地 PDF，优先参考 [PDF 输入指南](./references/pdf-input-guide.md)，必要时先运行 [PDF 抽取脚本](./scripts/extract_report_pdf.py)。
+如果 PDF 是扫描版，优先参考 [PDF OCR 指南](./references/pdf-ocr-guide.md) 并运行 [PDF OCR 脚本](./scripts/ocr_report_pdf.py)。
+如果用户只有股票代码，优先参考 [年报下载指南](./references/report-download-guide.md) 并运行 [年报下载脚本](./scripts/download_cninfo_report.py)。
 
 ## Procedure
 
 1. 先确认分析对象：公司、股票代码、报告期、行业、口径是否合并报表。
-2. 提取并整理三大表与附注数据，优先覆盖近三年和最近四个季度。
-3. 按A股披露口径拆分单季度数据，尤其注意半年报和三季报通常为年初至报告期末累计值。
-4. 先做业绩总览，再做三大表联动，再做分业务与成本毛利拆解，最后解读管理层讨论与风险。
-5. 明确区分“事实”“推导”“判断”，所有重要结论都要给出对应依据。
-6. 若发现异常波动，优先回看附注、非经常性损益、信用减值、资产减值、公允价值变动、存货跌价、汇兑、税率变化。
-7. 输出时给出结论、驱动因素、风险点和需要继续跟踪的指标。
+2. 如果输入是 PDF，先抽取文字、表格和关键页，再进入分析。
+3. 如果 PDF 是扫描版或抽取出的文本很差，先 OCR，再进入分析。
+4. 如果用户只有股票代码和年份，先自动下载对应年报 PDF，再做抽取。
+5. 提取并整理三大表与附注数据，优先覆盖近三年和最近四个季度。
+6. 按A股披露口径拆分单季度数据，尤其注意半年报和三季报通常为年初至报告期末累计值。
+7. 先做业绩总览，再做三大表联动，再做分业务与成本毛利拆解，最后解读管理层讨论与风险。
+8. 明确区分“事实”“推导”“判断”，所有重要结论都要给出对应依据。
+9. 若发现异常波动，优先回看附注、非经常性损益、信用减值、资产减值、公允价值变动、存货跌价、汇兑、税率变化。
+10. 输出时给出结论、驱动因素、风险点和需要继续跟踪的指标。
 
 ## Analysis Rules
 
@@ -63,9 +70,16 @@ user-invocable: true
 
 优先使用 [输出模板](./assets/output-template.md)。
 如果用户要更短、更像卖方晨会或点评报告的写法，优先使用 [券商风格摘要模板](./assets/broker-summary-template.md)。
+如果用户要更偏买方、关注预期差、分歧点和催化剂，优先使用 [买方投研纪要模板](./assets/buy-side-memo-template.md)。
 如果用户重点要求横向比较，优先使用 [同行对比模板](./assets/peer-comparison-template.md)。
 详细分析框架见 [A股年报分析框架](./references/analysis-framework.md)。
+PDF 处理说明见 [PDF 输入指南](./references/pdf-input-guide.md)。
+本地 PDF 自动抽取可使用 [PDF 抽取脚本](./scripts/extract_report_pdf.py)。
+扫描版 PDF 可使用 [PDF OCR 脚本](./scripts/ocr_report_pdf.py)。
+按股票代码自动下载年报可使用 [年报下载脚本](./scripts/download_cninfo_report.py)。
 可参考 [虚构案例示例](./references/example-case.md) 的写法。
+买方写法可参考 [预期差案例示例](./references/buy-side-expectation-gap-case.md)。
+分行业买方案例可参考 [制造业预期差案例](./references/buy-side-manufacturing-case.md)、[消费预期差案例](./references/buy-side-consumer-case.md)、[医药预期差案例](./references/buy-side-healthcare-case.md)。
 
 ## Quality Bar
 
