@@ -1,0 +1,35 @@
+name: Verify VCXPROJ Sync
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  vcxproj-sync:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch pull request base ref
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+
+      - name: Verify changed Visual Studio project files
+        shell: pwsh
+        run: |
+          $diffRange = if ('${{ github.event_name }}' -eq 'pull_request') {
+            "origin/${{ github.base_ref }}...HEAD"
+          }
+          else {
+            'HEAD~1..HEAD'
+          }
+
+          .\.github\skills\msvc-cpp-refactor\scripts\check-vcxproj-sync-template.ps1 `
+            -GitRoot $PWD `
+            -GitDiffRange $diffRange `
+            -FailOnIssue

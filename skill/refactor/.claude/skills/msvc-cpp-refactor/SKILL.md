@@ -118,3 +118,6 @@ English: It is optimized for codebases that contain Windows APIs, Visual Studio 
 - [MSVC 重构检查清单 / MSVC refactor checklist](./references/msvc-refactor-checklist.md)
 - [重构计划模板 / Refactor plan template](./assets/refactor-plan-template.md)
 - [VCXPROJ 与 SLN 同步指南 / VCXPROJ and SLN sync guide](./references/vcxproj-sln-sync.md)
+- [中文优先提示词示例集 / Chinese-first prompt examples](./references/chinese-prompt-examples.md)
+- [工程文件同步检查脚本模板 / VCXPROJ sync check script template](./scripts/check-vcxproj-sync-template.ps1)
+- [GitHub Actions workflow 模板 / GitHub Actions workflow template](./assets/vcxproj-sync-workflow-template.yml)
