@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 from io import BytesIO
 from pathlib import Path
+from tempfile import mkstemp
 
 try:
     import fitz
-    import pytesseract
     from PIL import Image
 except ImportError as exc:  # pragma: no cover - runtime dependency check
     raise SystemExit(
@@ -48,6 +50,10 @@ def parse_args() -> argparse.Namespace:
         help="Optional explicit path to tesseract executable.",
     )
     parser.add_argument(
+        "--tessdata-dir",
+        help="Optional explicit path to the Tesseract tessdata directory.",
+    )
+    parser.add_argument(
         "--keywords",
         help="Comma-separated custom keywords. Defaults to annual-report sections.",
     )
@@ -72,8 +78,10 @@ def main() -> None:
     if not pdf_path.exists():
         raise SystemExit(f"PDF not found: {pdf_path}")
 
-    if args.tesseract_cmd:
-        pytesseract.pytesseract.tesseract_cmd = args.tesseract_cmd
+    tesseract_cmd = str(Path(args.tesseract_cmd).expanduser().resolve()) if args.tesseract_cmd else "tesseract"
+    tessdata_dir = (
+        Path(args.tessdata_dir).expanduser().resolve() if args.tessdata_dir else None
+    )
 
     keywords = [
         item.strip()
@@ -96,7 +104,23 @@ def main() -> None:
             page = doc.load_page(page_number - 1)
             pixmap = page.get_pixmap(matrix=matrix, alpha=False)
             image = Image.open(BytesIO(pixmap.tobytes("png"))).convert("RGB")
-            text = normalize_text(pytesseract.image_to_string(image, lang=args.lang))
+            temp_fd, temp_path = mkstemp(suffix=".png")
+            os.close(temp_fd)
+            Path(temp_path).unlink(missing_ok=True)
+            try:
+                image.save(temp_path, format="PNG")
+                command = [tesseract_cmd]
+                if tessdata_dir:
+                    command.extend(["--tessdata-dir", str(tessdata_dir)])
+                command.extend([temp_path, "stdout", "-l", args.lang])
+                result = subprocess.run(
+                    command,
+                    check=True,
+                    capture_output=True,
+                )
+                text = normalize_text(result.stdout.decode("utf-8", errors="replace"))
+            finally:
+                Path(temp_path).unlink(missing_ok=True)
             page_chunks.append(f"## Page {page_number}\n\n{text or '[No OCR text extracted]'}")
             for keyword in keywords:
                 if keyword in text:
