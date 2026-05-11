@@ -49,9 +49,21 @@ python .github/skills/a-share-annual-report-analysis/scripts/ocr_report_pdf.py \
   --tesseract-cmd "C:\Program Files\Tesseract-OCR\tesseract.exe"
 ```
 
+如果你使用的是自定义语言包目录，或系统默认 `tessdata` 不完整，可以显式指定：
+
+```powershell
+python .github/skills/a-share-annual-report-analysis/scripts/ocr_report_pdf.py \
+  --pdf "C:\reports\company-2025-annual-report.pdf" \
+  --out ".\tmp\company-2025-ocr" \
+  --tesseract-cmd "C:\Program Files\Tesseract-OCR\tesseract.exe" \
+  --tessdata-dir ".\tmp\tessdata"
+```
+
 ## 5. 推荐语言
 
 默认使用 `chi_sim+eng`。如果系统里没有中文语言包，可以临时改成 `eng`，但中文识别质量会明显下降。
+
+如果 `chi_sim` 已经单独下载到本地目录，需要与 `--tessdata-dir` 一起使用。
 
 ## 6. 使用建议
 
