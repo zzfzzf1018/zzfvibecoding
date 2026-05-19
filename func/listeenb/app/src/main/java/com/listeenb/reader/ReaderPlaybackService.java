@@ -308,9 +308,16 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         if (voices == null || voices.isEmpty()) {
             return;
         }
+        String currentLanguage = Locale.getDefault().getLanguage();
         Voice fallback = null;
         for (Voice voice : voices) {
             if (voice == null || voice.getLocale() == null) {
+                continue;
+            }
+            if (!voice.getLocale().getLanguage().equals(currentLanguage)) {
+                if (fallback == null) {
+                    fallback = voice;
+                }
                 continue;
             }
             if (fallback == null) {

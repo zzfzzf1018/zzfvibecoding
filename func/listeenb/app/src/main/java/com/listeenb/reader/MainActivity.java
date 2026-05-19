@@ -141,7 +141,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         registerPlaybackReceiver();
         showHome();
         restoreLastBook();
-        enterImmersiveMode();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && immersiveMode) {
+            enterImmersiveMode();
+        }
     }
 
     @Override
@@ -653,6 +660,19 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void exitImmersiveMode() {
         View decorView = getWindow().getDecorView();
         decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (immersiveMode) {
+            toggleChromeVisibility();
+            return;
+        }
+        if (currentBook != null && !showingHome) {
+            showHome();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void showDeleteBooks() {
