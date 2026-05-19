@@ -137,6 +137,7 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
                     }
                 }
 
+                @SuppressWarnings("deprecation")
                 @Override
                 public void onError(String utteranceId) {
                     broadcastProgress(false);
@@ -148,6 +149,7 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void loadAndPlay(Uri uri, int chapterIndex) {
         if (loading) {
             return;
@@ -168,7 +170,11 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
                 speakFromCurrentChunk();
             } catch (Exception error) {
                 loading = false;
-                stopForeground(true);
+                if (Build.VERSION.SDK_INT >= 24) {
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                } else {
+                    stopForeground(true);
+                }
                 stopSelf();
             }
         });
@@ -221,6 +227,7 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         speakFromCurrentChunk();
     }
 
+    @SuppressWarnings("deprecation")
     private void stopPlayback() {
         if (textToSpeech != null) {
             textToSpeech.stop();
@@ -239,19 +246,19 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
     private Notification buildNotification(String text, boolean playing) {
         Intent openIntent = new Intent(this, MainActivity.class);
         PendingIntent openPendingIntent = PendingIntent.getActivity(this, 0, openIntent, pendingFlags());
-        Notification.Builder builder = Build.VERSION.SDK_INT >= 26
-                ? new Notification.Builder(this, CHANNEL_ID)
-                : new Notification.Builder(this);
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID);
         builder.setSmallIcon(R.drawable.ic_stat_reader)
                 .setContentTitle(currentBook == null ? "ListeenB 听书" : currentBook.getTitle())
                 .setContentText(text)
                 .setContentIntent(openPendingIntent)
                 .setOngoing(playing)
                 .setShowWhen(false)
-                .addAction(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-                        playing ? "暂停" : "继续", serviceAction(ACTION_TOGGLE, 1))
-                .addAction(android.R.drawable.ic_media_next, "下一章", serviceAction(ACTION_NEXT, 2))
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止", serviceAction(ACTION_STOP, 3));
+                .addAction(new Notification.Action.Builder(null,
+                        playing ? "暂停" : "继续", serviceAction(ACTION_TOGGLE, 1)).build())
+                .addAction(new Notification.Action.Builder(null,
+                        "下一章", serviceAction(ACTION_NEXT, 2)).build())
+                .addAction(new Notification.Action.Builder(null,
+                        "停止", serviceAction(ACTION_STOP, 3)).build());
         return builder.build();
     }
 
