@@ -134,6 +134,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         restoreVoicePreference();
         registerPlaybackReceiver();
         showHome();
+        restoreLastBook();
     }
 
     @Override
@@ -549,7 +550,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 return false;
             }
         });
-        scrollView.setOnTouchListener((view, event) -> gestureDetector != null && gestureDetector.onTouchEvent(event));
+        scrollView.setOnTouchListener((view, event) -> {
+            if (gestureDetector != null) {
+                gestureDetector.onTouchEvent(event);
+            }
+            return false;
+        });
     }
 
     private void showDeleteBooks() {
@@ -619,7 +625,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 runOnUiThread(() -> {
                     setReaderEnabled(true);
                     progressStore.clearBook();
-                    statusView.setText("EPUB 解析失败");
+                    statusView.setText("书籍解析失败");
                     Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
                 });
             }
@@ -1085,7 +1091,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void stopPlaybackServiceOnly() {
         Intent intent = new Intent(this, ReaderPlaybackService.class);
         intent.setAction(ReaderPlaybackService.ACTION_STOP);
-        startService(intent);
+        try {
+            startService(intent);
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private void selectVoice(String gender) {
@@ -1276,7 +1285,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private boolean hasBook() {
         if (currentBook == null || currentBook.isEmpty()) {
-            Toast.makeText(this, "请先导入 EPUB", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "请先导入 EPUB/TXT", Toast.LENGTH_SHORT).show();
             return false;
         }
         return true;

@@ -18,6 +18,7 @@ $compiled = Join-Path $out "compiled"
 $generated = Join-Path $out "gen"
 $classes = Join-Path $out "classes"
 $dex = Join-Path $out "dex"
+$defaultKeystorePath = Join-Path $root "build\keystores\release.keystore"
 
 if (!(Test-Path $platform)) {
     throw "Android platform jar not found: $platform"
@@ -45,12 +46,12 @@ function Invoke-Checked {
     }
 }
 
+if ([string]::IsNullOrWhiteSpace($KeystorePath)) {
+    $KeystorePath = $defaultKeystorePath
+}
+
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $compiled, $generated, $classes, $dex | Out-Null
-
-if ([string]::IsNullOrWhiteSpace($KeystorePath)) {
-    $KeystorePath = Join-Path $out "release.keystore"
-}
 
 Push-Location $root
 try {

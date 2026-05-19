@@ -101,6 +101,24 @@ apksigner verify --verbose app-release-signed.apk
 
 注意：`release.keystore`、签名密码和任何 `*.jks` 文件不要提交到 Git 仓库。
 
+如果当前机器没有安装 Gradle，也可以使用本项目内置的手工 Release 构建脚本：
+
+```powershell
+.\tools\build-release-apk.ps1
+```
+
+手工 Release APK 生成位置：
+
+```text
+build/manual-release/app-release.apk
+```
+
+默认情况下，脚本会在 `build/keystores/release.keystore` 生成一个本地测试用 release keystore。正式发布时建议传入自己的 keystore：
+
+```powershell
+.\tools\build-release-apk.ps1 -KeystorePath C:\path\to\release.keystore -KeystoreAlias listeenb-release
+```
+
 ## 使用说明
 
 1. 安装 APK 到 Android 设备或模拟器。

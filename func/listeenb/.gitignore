@@ -22,6 +22,8 @@ signing.properties
 
 # Generated manual build outputs
 build/manual/
+build/manual-release/
+build/keystores/
 
 # OS and editor files
 .DS_Store
