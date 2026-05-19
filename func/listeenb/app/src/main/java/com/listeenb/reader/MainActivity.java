@@ -2,13 +2,19 @@ package com.listeenb.reader;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.DocumentsContract;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
@@ -44,6 +50,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final int REQUEST_OPEN_EPUB = 1001;
+    private static final int REQUEST_OPEN_FOLDER = 1002;
     private static final String GENDER_MALE = "male";
     private static final String GENDER_FEMALE = "female";
     private static final int TTS_CHUNK_SIZE = 3200;
@@ -51,6 +58,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private final EpubParser epubParser = new EpubParser();
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final BroadcastReceiver playbackReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ReaderPlaybackService.ACTION_PROGRESS.equals(intent.getAction())) {
+                handlePlaybackProgress(intent);
+            }
+        }
+    };
 
     private ProgressStore progressStore;
     private TextToSpeech textToSpeech;
@@ -94,7 +109,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         speechPitch = progressStore.getSpeechPitch();
         textToSpeech = new TextToSpeech(this, this);
         buildUi();
+        requestNotificationPermissionIfNeeded();
         restoreVoicePreference();
+        registerPlaybackReceiver();
         restoreLastBook();
     }
 
@@ -105,6 +122,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (textToSpeech != null) {
             textToSpeech.stop();
             textToSpeech.shutdown();
+        }
+        try {
+            unregisterReceiver(playbackReceiver);
+        } catch (RuntimeException ignored) {
         }
         super.onDestroy();
     }
@@ -150,7 +171,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_OPEN_EPUB || resultCode != RESULT_OK || data == null || data.getData() == null) {
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
         Uri uri = data.getData();
@@ -159,7 +180,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             getContentResolver().takePersistableUriPermission(uri, flags);
         } catch (RuntimeException ignored) {
         }
-        loadBook(uri, true, 0, 0);
+        if (requestCode == REQUEST_OPEN_EPUB) {
+            loadBook(uri, true, 0, 0);
+        } else if (requestCode == REQUEST_OPEN_FOLDER) {
+            progressStore.saveImportFolderUri(uri.toString());
+            scanFolder(uri);
+        }
     }
 
     private void buildUi() {
@@ -180,6 +206,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         topBar.addView(commandButton("书架", view -> showBookshelf()));
         topBar.addView(commandButton("导入", view -> openDocumentPicker()));
+        topBar.addView(commandButton("管理", view -> showImportManager()));
         root.addView(topBar);
 
         LinearLayout infoRow = new LinearLayout(this);
@@ -235,9 +262,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
         previousButton = commandButton("上一章", view -> showChapter(currentChapterIndex - 1, 0));
-        listenButton = commandButton("播放", view -> speakCurrentChapter(false));
-        pauseButton = commandButton("暂停", view -> togglePauseResume());
-        stopButton = commandButton("停止", view -> stopSpeaking());
+        listenButton = commandButton("播放", view -> startPlaybackService(ReaderPlaybackService.ACTION_PLAY));
+        pauseButton = commandButton("暂停", view -> startPlaybackService(ReaderPlaybackService.ACTION_TOGGLE));
+        stopButton = commandButton("停止", view -> startPlaybackService(ReaderPlaybackService.ACTION_STOP));
         nextButton = commandButton("下一章", view -> showChapter(currentChapterIndex + 1, 0));
         controls.addView(previousButton, weightParams());
         controls.addView(listenButton, weightParams());
@@ -317,6 +344,125 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
     }
 
+    private void openFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_OPEN_FOLDER);
+    }
+
+    private void showImportManager() {
+        new AlertDialog.Builder(this)
+                .setTitle("导入管理")
+                .setItems(new String[]{"从文件夹批量导入", "重新扫描上次文件夹", "删除书架书籍"}, (dialog, which) -> {
+                    if (which == 0) {
+                        openFolderPicker();
+                    } else if (which == 1) {
+                        rescanLastFolder();
+                    } else {
+                        showDeleteBooks();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private void rescanLastFolder() {
+        String folderUri = progressStore.getImportFolderUri();
+        if (folderUri == null) {
+            Toast.makeText(this, "还没有选择过导入文件夹", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        scanFolder(Uri.parse(folderUri));
+    }
+
+    private void scanFolder(Uri folderUri) {
+        statusView.setText("正在扫描文件夹...");
+        executorService.execute(() -> {
+            int[] counts = new int[]{0, 0};
+            try {
+                String treeId = DocumentsContract.getTreeDocumentId(folderUri);
+                Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(folderUri, treeId);
+                String[] projection = new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE};
+                try (Cursor cursor = getContentResolver().query(childrenUri, projection, null, null, null)) {
+                    if (cursor != null) {
+                        while (cursor.moveToNext()) {
+                            String documentId = cursor.getString(0);
+                            String name = cursor.getString(1);
+                            String mimeType = cursor.getString(2);
+                            if (!isEpubFile(name, mimeType)) {
+                                continue;
+                            }
+                            Uri documentUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, documentId);
+                            try {
+                                EpubBook book = epubParser.parse(getContentResolver(), documentUri);
+                                progressStore.upsertBook(documentUri.toString(), book.getTitle(), book.getAuthor(), book.getChapters().size(), 0, 0, 0f);
+                                counts[0]++;
+                            } catch (Exception ignored) {
+                                counts[1]++;
+                            }
+                        }
+                    }
+                }
+                runOnUiThread(() -> statusView.setText("扫描完成：导入 " + counts[0] + " 本，失败 " + counts[1] + " 本"));
+            } catch (Exception error) {
+                runOnUiThread(() -> Toast.makeText(this, "扫描失败：" + error.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 3001);
+        }
+    }
+
+    private boolean isEpubFile(String name, String mimeType) {
+        String lowerName = name == null ? "" : name.toLowerCase(Locale.US);
+        String lowerMime = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        return lowerName.endsWith(".epub") || lowerMime.contains("epub");
+    }
+
+    private void showDeleteBooks() {
+        List<BookRecord> books = progressStore.getBooks();
+        if (books.isEmpty()) {
+            Toast.makeText(this, "书架为空", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] labels = new String[books.size()];
+        for (int index = 0; index < books.size(); index++) {
+            BookRecord book = books.get(index);
+            labels[index] = book.title + "\n" + book.author + " · " + Math.round(book.percent) + "%";
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("删除书籍")
+                .setItems(labels, (dialog, which) -> confirmDeleteBook(books.get(which)))
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private void confirmDeleteBook(BookRecord book) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除书籍")
+                .setMessage("从书架删除《" + book.title + "》？不会删除原始 EPUB 文件。")
+                .setPositiveButton("删除", (dialog, which) -> {
+                    progressStore.removeBook(book.uri);
+                    if (currentBookUri != null && book.uri.equals(currentBookUri.toString())) {
+                        stopPlaybackServiceOnly();
+                        currentBook = null;
+                        currentBookUri = null;
+                        titleView.setText("ListeenB");
+                        metaView.setText("本地 EPUB 阅读器");
+                        chapterView.setText("请选择一本 EPUB 书籍");
+                        contentView.setText("书籍已从书架删除。可以继续导入 EPUB，或从书架打开其他书。");
+                        updateCover(null);
+                        updateNavigationState();
+                    }
+                    Toast.makeText(this, "已删除书架记录", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     private void loadBook(Uri uri, boolean saveUri, int chapterIndex, int scrollY) {
         statusView.setText("正在解析 EPUB...");
         setReaderEnabled(false);
@@ -360,10 +506,16 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void showChapter(int chapterIndex, int scrollY) {
+        showChapterInternal(chapterIndex, scrollY, true);
+    }
+
+    private void showChapterInternal(int chapterIndex, int scrollY, boolean stopPlayback) {
         if (currentBook == null || currentBook.isEmpty()) {
             return;
         }
-        stopSpeaking();
+        if (stopPlayback) {
+            stopSpeaking();
+        }
         int maxIndex = currentBook.getChapters().size() - 1;
         currentChapterIndex = Math.max(0, Math.min(chapterIndex, maxIndex));
         EpubChapter chapter = currentBook.getChapters().get(currentChapterIndex);
@@ -374,6 +526,59 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             saveCurrentProgress();
         });
         updateNavigationState();
+    }
+
+    private void registerPlaybackReceiver() {
+        IntentFilter filter = new IntentFilter(ReaderPlaybackService.ACTION_PROGRESS);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(playbackReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(playbackReceiver, filter);
+        }
+    }
+
+    private void handlePlaybackProgress(Intent intent) {
+        int chapterIndex = intent.getIntExtra(ReaderPlaybackService.EXTRA_CHAPTER_INDEX, currentChapterIndex);
+        int chunkIndex = intent.getIntExtra(ReaderPlaybackService.EXTRA_CHUNK_INDEX, 0);
+        int chunkTotal = Math.max(1, intent.getIntExtra(ReaderPlaybackService.EXTRA_CHUNK_TOTAL, 1));
+        boolean playing = intent.getBooleanExtra(ReaderPlaybackService.EXTRA_IS_PLAYING, false);
+        speakingActive = playing;
+        speakingPaused = !playing && speakingActive;
+        if (currentBook != null && chapterIndex != currentChapterIndex) {
+            showChapterInternal(chapterIndex, 0, false);
+        }
+        autoScrollForSpeech(chunkIndex, chunkTotal);
+        statusView.setText(playing ? "后台听书中" : "听书已暂停或停止");
+        updateNavigationState();
+    }
+
+    private void autoScrollForSpeech(int chunkIndex, int chunkTotal) {
+        if (scrollView == null || scrollView.getChildCount() == 0) {
+            return;
+        }
+        scrollView.post(() -> {
+            int maxScroll = Math.max(0, scrollView.getChildAt(0).getHeight() - scrollView.getHeight());
+            int target = chunkTotal <= 1 ? 0 : Math.round(maxScroll * (chunkIndex / (float) chunkTotal));
+            scrollView.smoothScrollTo(0, Math.max(0, target));
+        });
+    }
+
+    private void startPlaybackService(String action) {
+        if (ReaderPlaybackService.ACTION_PLAY.equals(action) && !hasBook()) {
+            return;
+        }
+        saveCurrentProgress();
+        Intent intent = new Intent(this, ReaderPlaybackService.class);
+        intent.setAction(action);
+        if (currentBookUri != null) {
+            intent.putExtra(ReaderPlaybackService.EXTRA_BOOK_URI, currentBookUri.toString());
+            intent.putExtra(ReaderPlaybackService.EXTRA_CHAPTER_INDEX, currentChapterIndex);
+        }
+        if (Build.VERSION.SDK_INT >= 26 && ReaderPlaybackService.ACTION_PLAY.equals(action)) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
     }
 
     private void showBookshelf() {
@@ -630,12 +835,19 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (textToSpeech != null) {
             textToSpeech.stop();
         }
+        stopPlaybackServiceOnly();
         speakingActive = false;
         speakingPaused = false;
         if (statusView != null) {
             statusView.setText("已停止播放");
         }
         updateNavigationState();
+    }
+
+    private void stopPlaybackServiceOnly() {
+        Intent intent = new Intent(this, ReaderPlaybackService.class);
+        intent.setAction(ReaderPlaybackService.ACTION_STOP);
+        startService(intent);
     }
 
     private void selectVoice(String gender) {

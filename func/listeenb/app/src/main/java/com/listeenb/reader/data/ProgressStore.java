@@ -21,6 +21,7 @@ public class ProgressStore {
     private static final String KEY_NIGHT_MODE = "night_mode";
     private static final String KEY_SPEECH_RATE = "speech_rate";
     private static final String KEY_SPEECH_PITCH = "speech_pitch";
+    private static final String KEY_IMPORT_FOLDER_URI = "import_folder_uri";
 
     private final SharedPreferences preferences;
 
@@ -96,6 +97,14 @@ public class ProgressStore {
                 .apply();
     }
 
+    public void saveImportFolderUri(String uri) {
+        preferences.edit().putString(KEY_IMPORT_FOLDER_URI, uri).apply();
+    }
+
+    public String getImportFolderUri() {
+        return preferences.getString(KEY_IMPORT_FOLDER_URI, null);
+    }
+
     public void upsertBook(String uri, String title, String author, int chapterCount, int chapterIndex, int scrollY, float percent) {
         List<BookRecord> books = getBooks();
         BookRecord updated = new BookRecord(uri, title, author, chapterCount, chapterIndex, scrollY, percent, System.currentTimeMillis());
@@ -153,6 +162,25 @@ public class ProgressStore {
             }
         }
         return null;
+    }
+
+    public void removeBook(String uri) {
+        if (uri == null) {
+            return;
+        }
+        List<BookRecord> books = getBooks();
+        for (int index = books.size() - 1; index >= 0; index--) {
+            if (uri.equals(books.get(index).uri)) {
+                books.remove(index);
+            }
+        }
+        saveBooks(books);
+        preferences.edit()
+                .remove(KEY_BOOKMARKS + safeKey(uri))
+                .apply();
+        if (uri.equals(getBookUri())) {
+            clearBook();
+        }
     }
 
     public void addBookmark(String bookUri, String bookTitle, int chapterIndex, String chapterTitle, int scrollY, String note) {
