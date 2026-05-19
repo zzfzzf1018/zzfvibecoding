@@ -13,12 +13,12 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.lisb.reader"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.lisb.reader"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
