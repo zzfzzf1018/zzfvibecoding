@@ -36,6 +36,8 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
     public static final String EXTRA_CHUNK_INDEX = "chunk_index";
     public static final String EXTRA_CHUNK_TOTAL = "chunk_total";
     public static final String EXTRA_IS_PLAYING = "is_playing";
+    public static final String EXTRA_IS_ACTIVE = "is_active";
+    public static final String EXTRA_IS_PAUSED = "is_paused";
 
     private static final String CHANNEL_ID = "reader_playback";
     private static final int NOTIFICATION_ID = 42;
@@ -136,6 +138,9 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
                     broadcastProgress(false);
                 }
             });
+            if (currentBook != null && !speechChunks.isEmpty() && !paused) {
+                speakFromCurrentChunk();
+            }
         }
     }
 
@@ -217,6 +222,8 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
             textToSpeech.stop();
         }
         paused = false;
+        currentBook = null;
+        speechChunks.clear();
         broadcastProgress(false);
         if (Build.VERSION.SDK_INT >= 24) {
             stopForeground(STOP_FOREGROUND_REMOVE);
@@ -269,6 +276,8 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         Intent intent = new Intent(ACTION_PROGRESS);
         intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_IS_PLAYING, playing && !paused);
+        intent.putExtra(EXTRA_IS_ACTIVE, playing || paused);
+        intent.putExtra(EXTRA_IS_PAUSED, paused);
         intent.putExtra(EXTRA_CHAPTER_INDEX, currentChapterIndex);
         intent.putExtra(EXTRA_CHUNK_INDEX, Math.max(0, speechChunkIndex));
         intent.putExtra(EXTRA_CHUNK_TOTAL, Math.max(1, speechChunks.size()));

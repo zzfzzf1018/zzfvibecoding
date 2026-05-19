@@ -106,6 +106,14 @@ public class ProgressStore {
     }
 
     public void upsertBook(String uri, String title, String author, int chapterCount, int chapterIndex, int scrollY, float percent) {
+        upsertBook(uri, title, author, chapterCount, chapterIndex, scrollY, percent, true);
+    }
+
+    public void upsertScannedBook(String uri, String title, String author, int chapterCount) {
+        upsertBook(uri, title, author, chapterCount, 0, 0, 0f, false);
+    }
+
+    private void upsertBook(String uri, String title, String author, int chapterCount, int chapterIndex, int scrollY, float percent, boolean makeCurrent) {
         List<BookRecord> books = getBooks();
         BookRecord updated = new BookRecord(uri, title, author, chapterCount, chapterIndex, scrollY, percent, System.currentTimeMillis());
         boolean replaced = false;
@@ -120,7 +128,9 @@ public class ProgressStore {
             books.add(0, updated);
         }
         saveBooks(books);
-        saveBookUri(uri);
+        if (makeCurrent) {
+            saveBookUri(uri);
+        }
     }
 
     public void updateBookProgress(String uri, int chapterIndex, int scrollY, float percent) {

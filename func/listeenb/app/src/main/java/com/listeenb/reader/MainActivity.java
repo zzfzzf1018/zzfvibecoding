@@ -395,7 +395,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                             Uri documentUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, documentId);
                             try {
                                 EpubBook book = epubParser.parse(getContentResolver(), documentUri);
-                                progressStore.upsertBook(documentUri.toString(), book.getTitle(), book.getAuthor(), book.getChapters().size(), 0, 0, 0f);
+                                progressStore.upsertScannedBook(documentUri.toString(), book.getTitle(), book.getAuthor(), book.getChapters().size());
                                 counts[0]++;
                             } catch (Exception ignored) {
                                 counts[1]++;
@@ -542,13 +542,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         int chunkIndex = intent.getIntExtra(ReaderPlaybackService.EXTRA_CHUNK_INDEX, 0);
         int chunkTotal = Math.max(1, intent.getIntExtra(ReaderPlaybackService.EXTRA_CHUNK_TOTAL, 1));
         boolean playing = intent.getBooleanExtra(ReaderPlaybackService.EXTRA_IS_PLAYING, false);
-        speakingActive = playing;
-        speakingPaused = !playing && speakingActive;
+        boolean active = intent.getBooleanExtra(ReaderPlaybackService.EXTRA_IS_ACTIVE, playing);
+        speakingActive = active;
+        speakingPaused = intent.getBooleanExtra(ReaderPlaybackService.EXTRA_IS_PAUSED, active && !playing);
         if (currentBook != null && chapterIndex != currentChapterIndex) {
             showChapterInternal(chapterIndex, 0, false);
         }
         autoScrollForSpeech(chunkIndex, chunkTotal);
-        statusView.setText(playing ? "后台听书中" : "听书已暂停或停止");
+        statusView.setText(playing ? "后台听书中" : (speakingPaused ? "听书已暂停" : "听书已停止"));
         updateNavigationState();
     }
 
