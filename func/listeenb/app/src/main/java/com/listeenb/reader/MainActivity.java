@@ -103,6 +103,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private boolean showingHome;
     private GestureDetector gestureDetector;
 
+    private boolean immersiveMode;
+    private LinearLayout topBar;
+    private LinearLayout infoRow;
+    private LinearLayout actionRow;
+    private LinearLayout controlsRow;
+
     private LinearLayout root;
     private TextView titleView;
     private TextView metaView;
@@ -135,6 +141,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         registerPlaybackReceiver();
         showHome();
         restoreLastBook();
+        enterImmersiveMode();
     }
 
     @Override
@@ -215,7 +222,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(12), dp(10), dp(12), dp(10));
 
-        LinearLayout topBar = new LinearLayout(this);
+        topBar = new LinearLayout(this);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -232,7 +239,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         topBar.addView(commandButton("管理", view -> showImportManager()));
         root.addView(topBar);
 
-        LinearLayout infoRow = new LinearLayout(this);
+        infoRow = new LinearLayout(this);
         infoRow.setOrientation(LinearLayout.HORIZONTAL);
         infoRow.setGravity(Gravity.CENTER_VERTICAL);
         coverView = new ImageView(this);
@@ -254,7 +261,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         infoRow.addView(metaBox, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         root.addView(infoRow);
 
-        LinearLayout actionRow = new LinearLayout(this);
+        actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.addView(commandButton("目录", view -> showToc()), weightParams());
         actionRow.addView(commandButton("设置", view -> showReadingSettings()), weightParams());
@@ -278,24 +285,29 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         genderGroup.setOnCheckedChangeListener((group, checkedId) -> {
             View checked = group.findViewById(checkedId);
             if (checked != null && checked.getTag() != null) {
-                progressStore.saveVoiceGender(checked.getTag().toString());
+                String gender = checked.getTag().toString();
+                progressStore.saveVoiceGender(gender);
+                // If playback is active, restart with new voice
+                if (speakingActive) {
+                    startPlaybackService(ReaderPlaybackService.ACTION_PLAY);
+                }
             }
         });
         root.addView(genderGroup);
 
-        LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controlsRow = new LinearLayout(this);
+        controlsRow.setOrientation(LinearLayout.HORIZONTAL);
         previousButton = commandButton("上一章", view -> showChapter(currentChapterIndex - 1, 0));
         listenButton = commandButton("播放", view -> startPlaybackService(ReaderPlaybackService.ACTION_PLAY));
         pauseButton = commandButton("暂停", view -> startPlaybackService(ReaderPlaybackService.ACTION_TOGGLE));
         stopButton = commandButton("停止", view -> startPlaybackService(ReaderPlaybackService.ACTION_STOP));
         nextButton = commandButton("下一章", view -> showChapter(currentChapterIndex + 1, 0));
-        controls.addView(previousButton, weightParams());
-        controls.addView(listenButton, weightParams());
-        controls.addView(pauseButton, weightParams());
-        controls.addView(stopButton, weightParams());
-        controls.addView(nextButton, weightParams());
-        root.addView(controls);
+        controlsRow.addView(previousButton, weightParams());
+        controlsRow.addView(listenButton, weightParams());
+        controlsRow.addView(pauseButton, weightParams());
+        controlsRow.addView(stopButton, weightParams());
+        controlsRow.addView(nextButton, weightParams());
+        root.addView(controlsRow);
 
         statusView = new TextView(this);
         statusView.setText("准备就绪");
@@ -525,6 +537,33 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void setupGestures() {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
+            public boolean onSingleTapConfirmed(MotionEvent event) {
+                if (currentBook == null) {
+                    return false;
+                }
+                float x = event.getX();
+                float y = event.getY();
+                int width = scrollView.getWidth();
+                int height = scrollView.getHeight();
+                // Tap center to toggle immersive/chrome
+                if (x > width * 0.3f && x < width * 0.7f && y > height * 0.3f && y < height * 0.7f) {
+                    toggleChromeVisibility();
+                    return true;
+                }
+                // Tap right or bottom: next page
+                if (x > width * 0.7f || (y > height * 0.7f && x >= width * 0.3f)) {
+                    scrollPage(true);
+                    return true;
+                }
+                // Tap left or top: previous page
+                if (x < width * 0.3f || y < height * 0.3f) {
+                    scrollPage(false);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
             public boolean onDoubleTap(MotionEvent event) {
                 if (currentBook != null) {
                     showToc();
@@ -556,6 +595,64 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             }
             return false;
         });
+    }
+
+    private void scrollPage(boolean forward) {
+        int pageHeight = scrollView.getHeight() - dp(40);
+        if (forward) {
+            int maxScroll = scrollView.getChildAt(0).getHeight() - scrollView.getHeight();
+            if (scrollView.getScrollY() >= maxScroll - dp(10)) {
+                // At bottom of chapter, go to next chapter
+                if (currentBook != null && currentChapterIndex < currentBook.getChapters().size() - 1) {
+                    showChapter(currentChapterIndex + 1, 0);
+                }
+            } else {
+                scrollView.smoothScrollBy(0, pageHeight);
+            }
+        } else {
+            if (scrollView.getScrollY() <= dp(10)) {
+                // At top of chapter, go to previous chapter
+                if (currentBook != null && currentChapterIndex > 0) {
+                    showChapter(currentChapterIndex - 1, 0);
+                }
+            } else {
+                scrollView.smoothScrollBy(0, -pageHeight);
+            }
+        }
+    }
+
+    private void toggleChromeVisibility() {
+        immersiveMode = !immersiveMode;
+        int visibility = immersiveMode ? View.GONE : View.VISIBLE;
+        topBar.setVisibility(visibility);
+        infoRow.setVisibility(visibility);
+        actionRow.setVisibility(visibility);
+        genderGroup.setVisibility(visibility);
+        controlsRow.setVisibility(visibility);
+        statusView.setVisibility(visibility);
+        if (immersiveMode) {
+            enterImmersiveMode();
+            root.setPadding(dp(8), dp(4), dp(8), dp(4));
+        } else {
+            exitImmersiveMode();
+            applyResponsiveLayout();
+        }
+    }
+
+    private void enterImmersiveMode() {
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+
+    private void exitImmersiveMode() {
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
     private void showDeleteBooks() {
