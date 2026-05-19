@@ -243,10 +243,13 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         }
     }
 
+    @SuppressWarnings("deprecation")
     private Notification buildNotification(String text, boolean playing) {
         Intent openIntent = new Intent(this, MainActivity.class);
         PendingIntent openPendingIntent = PendingIntent.getActivity(this, 0, openIntent, pendingFlags());
-        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(this, CHANNEL_ID)
+                : new Notification.Builder(this);
         builder.setSmallIcon(R.drawable.ic_stat_reader)
                 .setContentTitle(currentBook == null ? "ListeenB 听书" : currentBook.getTitle())
                 .setContentText(text)

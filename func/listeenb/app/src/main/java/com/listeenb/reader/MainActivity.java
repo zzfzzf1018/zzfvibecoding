@@ -685,7 +685,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                    () -> handleBack());
+                    () -> {
+                        if (!handleBack()) {
+                            finish();
+                        }
+                    });
         }
     }
 
