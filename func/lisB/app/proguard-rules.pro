@@ -1,4 +1,4 @@
 # Default ProGuard rules
--keep class nl.siegmann.epublib.** { *; }
--dontwarn nl.siegmann.epublib.**
+-keep class io.documentnode.epub4j.** { *; }
+-dontwarn io.documentnode.epub4j.**
 -dontwarn org.slf4j.**

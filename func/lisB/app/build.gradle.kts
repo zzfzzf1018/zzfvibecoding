@@ -14,6 +14,7 @@ val keystoreProps = Properties().apply {
 android {
     namespace = "com.lisb.reader"
     compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.lisb.reader"
@@ -79,8 +80,8 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // EPUB parser
-    implementation("nl.siegmann.epublib:epublib-core:3.1") {
+    // EPUB parser (active fork of epublib, on Maven Central)
+    implementation("io.documentnode:epub4j-core:4.2.2") {
         exclude(group = "org.slf4j")
         exclude(group = "xmlpull")
     }

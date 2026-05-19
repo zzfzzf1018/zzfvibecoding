@@ -1,10 +1,8 @@
 package com.lisb.reader.ui
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -430,41 +428,6 @@ class ReaderActivity : AppCompatActivity() {
         super.onDestroy()
         saveProgress()
         tts?.shutdown()
-    }
-
-    /** A transparent View placed above the WebView. Forwards tap coordinates while
-     * letting long-press / scroll fall through to the WebView. */
-    class TouchOverlay @JvmOverloads constructor(
-        context: Context, attrs: android.util.AttributeSet? = null
-    ) : View(context, attrs) {
-        var onTap: ((x: Float, y: Float, w: Int, h: Int) -> Unit)? = null
-        private var downX = 0f
-        private var downY = 0f
-        private var downTime = 0L
-
-        @SuppressLint("ClickableViewAccessibility")
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.x; downY = event.y; downTime = System.currentTimeMillis()
-                    return true
-                }
-                MotionEvent.ACTION_UP -> {
-                    val dx = event.x - downX; val dy = event.y - downY
-                    val dist2 = dx * dx + dy * dy
-                    val elapsed = System.currentTimeMillis() - downTime
-                    val slop = 12 * resources.displayMetrics.density
-                    if (dist2 < slop * slop && elapsed < 500) {
-                        onTap?.invoke(event.x, event.y, width, height)
-                        performClick()
-                        return true
-                    }
-                }
-            }
-            return false
-        }
-
-        override fun performClick(): Boolean { super.performClick(); return true }
     }
 
     companion object { const val EXTRA_BOOK_ID = "book_id" }

@@ -3,9 +3,9 @@ package com.lisb.reader.epub
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
-import nl.siegmann.epublib.domain.Book
-import nl.siegmann.epublib.domain.Resource
-import nl.siegmann.epublib.epub.EpubReader
+import io.documentnode.epub4j.domain.Book
+import io.documentnode.epub4j.domain.Resource
+import io.documentnode.epub4j.epub.EpubReader
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.io.File
