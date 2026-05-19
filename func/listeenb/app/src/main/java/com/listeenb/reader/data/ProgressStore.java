@@ -22,6 +22,7 @@ public class ProgressStore {
     private static final String KEY_SPEECH_RATE = "speech_rate";
     private static final String KEY_SPEECH_PITCH = "speech_pitch";
     private static final String KEY_IMPORT_FOLDER_URI = "import_folder_uri";
+    private static final String KEY_THEME = "theme";
 
     private final SharedPreferences preferences;
 
@@ -74,11 +75,20 @@ public class ProgressStore {
         return preferences.getBoolean(KEY_NIGHT_MODE, false);
     }
 
+    public String getTheme() {
+        return preferences.getString(KEY_THEME, isNightMode() ? "night" : "paper");
+    }
+
     public void saveReadingSettings(float textSize, float lineSpacing, boolean nightMode) {
+        saveReadingSettings(textSize, lineSpacing, nightMode, nightMode ? "night" : "paper");
+    }
+
+    public void saveReadingSettings(float textSize, float lineSpacing, boolean nightMode, String theme) {
         preferences.edit()
                 .putFloat(KEY_TEXT_SIZE, textSize)
                 .putFloat(KEY_LINE_SPACING, lineSpacing)
                 .putBoolean(KEY_NIGHT_MODE, nightMode)
+                .putString(KEY_THEME, theme)
                 .apply();
     }
 

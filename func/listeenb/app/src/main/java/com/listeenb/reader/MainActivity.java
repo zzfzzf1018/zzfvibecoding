@@ -9,18 +9,25 @@ import android.content.IntentFilter;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.text.InputType;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.BackgroundColorSpan;
+import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -38,9 +45,12 @@ import com.listeenb.reader.data.ProgressStore.Bookmark;
 import com.listeenb.reader.epub.EpubBook;
 import com.listeenb.reader.epub.EpubChapter;
 import com.listeenb.reader.epub.EpubParser;
+import com.listeenb.reader.epub.TextBookParser;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -54,8 +64,13 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private static final String GENDER_MALE = "male";
     private static final String GENDER_FEMALE = "female";
     private static final int TTS_CHUNK_SIZE = 3200;
+    private static final int SORT_RECENT = 0;
+    private static final int SORT_TITLE = 1;
+    private static final int SORT_AUTHOR = 2;
+    private static final int SORT_PROGRESS = 3;
 
     private final EpubParser epubParser = new EpubParser();
+    private final TextBookParser textBookParser = new TextBookParser();
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final BroadcastReceiver playbackReceiver = new BroadcastReceiver() {
@@ -82,6 +97,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private boolean nightMode;
     private float speechRate;
     private float speechPitch;
+    private String themeName;
+    private int bookshelfSort = SORT_RECENT;
+    private boolean bookshelfOnlyUnread;
+    private boolean showingHome;
+    private GestureDetector gestureDetector;
 
     private LinearLayout root;
     private TextView titleView;
@@ -105,6 +125,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         textSize = progressStore.getTextSize();
         lineSpacing = progressStore.getLineSpacing();
         nightMode = progressStore.isNightMode();
+        themeName = progressStore.getTheme();
         speechRate = progressStore.getSpeechRate();
         speechPitch = progressStore.getSpeechPitch();
         textToSpeech = new TextToSpeech(this, this);
@@ -112,7 +133,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         requestNotificationPermissionIfNeeded();
         restoreVoicePreference();
         registerPlaybackReceiver();
-        restoreLastBook();
+        showHome();
     }
 
     @Override
@@ -204,7 +225,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         titleView.setEllipsize(TextUtils.TruncateAt.END);
         topBar.addView(titleView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        topBar.addView(commandButton("书架", view -> showBookshelf()));
+        topBar.addView(commandButton("首页", view -> showHome()));
+        topBar.addView(commandButton("书架", view -> showBookshelfOptions()));
         topBar.addView(commandButton("导入", view -> openDocumentPicker()));
         topBar.addView(commandButton("管理", view -> showImportManager()));
         root.addView(topBar);
@@ -245,6 +267,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         contentView.setPadding(0, dp(8), 0, dp(24));
         scrollView.addView(contentView);
         scrollView.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> saveCurrentProgress());
+        setupGestures();
         root.addView(scrollView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
         genderGroup = new RadioGroup(this);
@@ -280,6 +303,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         root.addView(statusView);
 
         setContentView(root);
+        applyResponsiveLayout();
         applyReadingTheme();
         updateNavigationState();
     }
@@ -328,10 +352,41 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
     }
 
+    private void showHome() {
+        showingHome = true;
+        currentBook = null;
+        currentBookUri = null;
+        titleView.setText("ListeenB");
+        metaView.setText("最近阅读首页");
+        chapterView.setText("导入、书架、搜索和听书从这里开始");
+        updateCover(null);
+        List<BookRecord> books = progressStore.getBooks();
+        StringBuilder builder = new StringBuilder();
+        builder.append("继续阅读\n\n");
+        if (books.isEmpty()) {
+            builder.append("书架为空。点击“导入”选择 EPUB/TXT，或点击“管理”从文件夹批量导入。\n");
+        } else {
+            int count = Math.min(5, books.size());
+            for (int index = 0; index < count; index++) {
+                BookRecord book = books.get(index);
+                builder.append(index + 1).append(". ").append(book.title)
+                        .append("\n   ").append(book.author)
+                        .append(" · ").append(Math.round(book.percent)).append("%")
+                        .append(" · ").append(formatDate(book.updatedAt)).append("\n\n");
+            }
+            builder.append("点击“书架”可按最近、书名、作者或进度排序，并继续阅读。\n");
+        }
+        builder.append("\n手势：阅读时左右滑动切换章节，双击正文打开/关闭目录。");
+        contentView.setText(builder.toString());
+        scrollView.scrollTo(0, 0);
+        updateNavigationState();
+    }
+
     private void openDocumentPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/epub+zip");
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/epub+zip", "text/plain"});
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         try {
             startActivityForResult(intent, REQUEST_OPEN_EPUB);
@@ -379,6 +434,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         statusView.setText("正在扫描文件夹...");
         executorService.execute(() -> {
             int[] counts = new int[]{0, 0};
+            List<String> failures = new ArrayList<>();
             try {
                 String treeId = DocumentsContract.getTreeDocumentId(folderUri);
                 Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(folderUri, treeId);
@@ -389,21 +445,22 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                             String documentId = cursor.getString(0);
                             String name = cursor.getString(1);
                             String mimeType = cursor.getString(2);
-                            if (!isEpubFile(name, mimeType)) {
+                            if (!isReadableBookFile(name, mimeType)) {
                                 continue;
                             }
                             Uri documentUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, documentId);
                             try {
-                                EpubBook book = epubParser.parse(getContentResolver(), documentUri);
+                                EpubBook book = parseBook(documentUri, name, mimeType);
                                 progressStore.upsertScannedBook(documentUri.toString(), book.getTitle(), book.getAuthor(), book.getChapters().size());
                                 counts[0]++;
-                            } catch (Exception ignored) {
+                            } catch (Exception error) {
                                 counts[1]++;
+                                failures.add((name == null ? documentUri.toString() : name) + "：" + error.getMessage());
                             }
                         }
                     }
                 }
-                runOnUiThread(() -> statusView.setText("扫描完成：导入 " + counts[0] + " 本，失败 " + counts[1] + " 本"));
+                runOnUiThread(() -> showImportReport(counts[0], counts[1], failures));
             } catch (Exception error) {
                 runOnUiThread(() -> Toast.makeText(this, "扫描失败：" + error.getMessage(), Toast.LENGTH_LONG).show());
             }
@@ -416,10 +473,83 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
     }
 
-    private boolean isEpubFile(String name, String mimeType) {
+    private boolean isReadableBookFile(String name, String mimeType) {
         String lowerName = name == null ? "" : name.toLowerCase(Locale.US);
         String lowerMime = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
-        return lowerName.endsWith(".epub") || lowerMime.contains("epub");
+        return lowerName.endsWith(".epub") || lowerName.endsWith(".txt") || lowerMime.contains("epub") || lowerMime.startsWith("text/");
+    }
+
+    private EpubBook parseBook(Uri uri, String name, String mimeType) throws Exception {
+        String lowerName = name == null ? "" : name.toLowerCase(Locale.US);
+        String lowerMime = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        if (lowerName.endsWith(".txt") || lowerMime.startsWith("text/")) {
+            return textBookParser.parse(getContentResolver(), uri, name);
+        }
+        return epubParser.parse(getContentResolver(), uri);
+    }
+
+    private String getDisplayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        } catch (Exception ignored) {
+        }
+        String path = uri.getLastPathSegment();
+        return path == null ? "本地书籍" : path;
+    }
+
+    private String getMimeType(Uri uri) {
+        String type = getContentResolver().getType(uri);
+        return type == null ? "" : type;
+    }
+
+    private void showImportReport(int imported, int failed, List<String> failures) {
+        statusView.setText("扫描完成：导入 " + imported + " 本，失败 " + failed + " 本");
+        if (failures.isEmpty()) {
+            Toast.makeText(this, "导入完成：" + imported + " 本", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String failure : failures) {
+            builder.append(failure).append("\n\n");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("导入失败报告")
+                .setMessage(builder.toString())
+                .setPositiveButton("知道了", null)
+                .show();
+    }
+
+    private void setupGestures() {
+        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDoubleTap(MotionEvent event) {
+                if (currentBook != null) {
+                    showToc();
+                }
+                return true;
+            }
+
+            @Override
+            public boolean onFling(MotionEvent down, MotionEvent up, float velocityX, float velocityY) {
+                if (currentBook == null || down == null || up == null) {
+                    return false;
+                }
+                float deltaX = up.getX() - down.getX();
+                float deltaY = up.getY() - down.getY();
+                if (Math.abs(deltaX) > dp(72) && Math.abs(deltaX) > Math.abs(deltaY) * 1.4f) {
+                    if (deltaX < 0) {
+                        showChapter(currentChapterIndex + 1, 0);
+                    } else {
+                        showChapter(currentChapterIndex - 1, 0);
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+        scrollView.setOnTouchListener((view, event) -> gestureDetector != null && gestureDetector.onTouchEvent(event));
     }
 
     private void showDeleteBooks() {
@@ -468,8 +598,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         setReaderEnabled(false);
         executorService.execute(() -> {
             try {
-                EpubBook parsed = epubParser.parse(getContentResolver(), uri);
+                EpubBook parsed = parseBook(uri, getDisplayName(uri), getMimeType(uri));
                 runOnUiThread(() -> {
+                    showingHome = false;
                     currentBook = parsed;
                     currentBookUri = uri;
                     titleView.setText(parsed.getTitle());
@@ -513,6 +644,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (currentBook == null || currentBook.isEmpty()) {
             return;
         }
+        showingHome = false;
         if (stopPlayback) {
             stopSpeaking();
         }
@@ -549,8 +681,25 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             showChapterInternal(chapterIndex, 0, false);
         }
         autoScrollForSpeech(chunkIndex, chunkTotal);
+        highlightSpeechChunk(chunkIndex, chunkTotal);
         statusView.setText(playing ? "后台听书中" : (speakingPaused ? "听书已暂停" : "听书已停止"));
         updateNavigationState();
+    }
+
+    private void highlightSpeechChunk(int chunkIndex, int chunkTotal) {
+        if (currentBook == null || contentView == null) {
+            return;
+        }
+        CharSequence content = contentView.getText();
+        if (content == null || content.length() == 0) {
+            return;
+        }
+        int length = content.length();
+        int start = Math.max(0, Math.min(length, Math.round(length * (chunkIndex / (float) Math.max(1, chunkTotal)))));
+        int end = Math.max(start, Math.min(length, Math.round(length * ((chunkIndex + 1f) / Math.max(1, chunkTotal)))));
+        SpannableString highlighted = new SpannableString(content.toString());
+        highlighted.setSpan(new BackgroundColorSpan(nightMode ? 0xFF5D4A1F : 0xFFFFF59D), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        contentView.setText(highlighted);
     }
 
     private void autoScrollForSpeech(int chunkIndex, int chunkTotal) {
@@ -582,10 +731,25 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
     }
 
+    private void showBookshelfOptions() {
+        new AlertDialog.Builder(this)
+                .setTitle("书架")
+                .setItems(new String[]{"最近阅读排序", "书名排序", "作者排序", "进度排序", bookshelfOnlyUnread ? "显示全部" : "只看未读"}, (dialog, which) -> {
+                    if (which == 4) {
+                        bookshelfOnlyUnread = !bookshelfOnlyUnread;
+                    } else {
+                        bookshelfSort = which;
+                    }
+                    showBookshelf();
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
     private void showBookshelf() {
-        List<BookRecord> books = progressStore.getBooks();
+        final List<BookRecord> books = filterAndSortBooks(progressStore.getBooks());
         if (books.isEmpty()) {
-            Toast.makeText(this, "书架为空，请先导入 EPUB", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "书架为空或没有匹配书籍", Toast.LENGTH_SHORT).show();
             return;
         }
         String[] labels = new String[books.size()];
@@ -601,6 +765,27 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 })
                 .setNegativeButton("关闭", null)
                 .show();
+    }
+
+    private List<BookRecord> filterAndSortBooks(List<BookRecord> source) {
+        List<BookRecord> books = new ArrayList<>();
+        for (BookRecord book : source) {
+            if (!bookshelfOnlyUnread || book.percent < 99f) {
+                books.add(book);
+            }
+        }
+        Comparator<BookRecord> comparator;
+        if (bookshelfSort == SORT_TITLE) {
+            comparator = (left, right) -> left.title.compareToIgnoreCase(right.title);
+        } else if (bookshelfSort == SORT_AUTHOR) {
+            comparator = (left, right) -> left.author.compareToIgnoreCase(right.author);
+        } else if (bookshelfSort == SORT_PROGRESS) {
+            comparator = (left, right) -> Float.compare(right.percent, left.percent);
+        } else {
+            comparator = (left, right) -> Long.compare(right.updatedAt, left.updatedAt);
+        }
+        Collections.sort(books, comparator);
+        return books;
     }
 
     private void showToc() {
@@ -641,8 +826,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             saveAndApplySettings();
             preview.setText(settingsSummary());
         });
-        Button nightButton = commandButton("夜间模式", view -> {
-            nightMode = !nightMode;
+        Button nightButton = commandButton("主题", view -> {
+            cycleTheme();
             saveAndApplySettings();
             preview.setText(settingsSummary());
         });
@@ -673,9 +858,35 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private String settingsSummary() {
         return "字号 " + Math.round(textSize)
                 + " · 行距 " + String.format(Locale.US, "%.2f", lineSpacing)
-                + " · " + (nightMode ? "夜间" : "日间")
+                + " · " + themeLabel()
                 + "\n语速 " + String.format(Locale.US, "%.1f", speechRate)
                 + " · 音调 " + String.format(Locale.US, "%.1f", speechPitch);
+    }
+
+    private void cycleTheme() {
+        if ("paper".equals(themeName)) {
+            themeName = "night";
+        } else if ("night".equals(themeName)) {
+            themeName = "eye";
+        } else if ("eye".equals(themeName)) {
+            themeName = "ink";
+        } else {
+            themeName = "paper";
+        }
+        nightMode = "night".equals(themeName);
+    }
+
+    private String themeLabel() {
+        if ("night".equals(themeName)) {
+            return "夜间";
+        }
+        if ("eye".equals(themeName)) {
+            return "护眼";
+        }
+        if ("ink".equals(themeName)) {
+            return "墨水屏";
+        }
+        return "纸张";
     }
 
     private void showSearchDialog() {
@@ -737,11 +948,13 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
         new AlertDialog.Builder(this)
                 .setTitle("书签与笔记")
-                .setItems(new String[]{"添加书签/笔记", "查看书签"}, (dialog, which) -> {
+                .setItems(new String[]{"添加书签/笔记", "查看书签", "导出笔记"}, (dialog, which) -> {
                     if (which == 0) {
                         addBookmark();
-                    } else {
+                    } else if (which == 1) {
                         showBookmarks();
+                    } else {
+                        exportBookmarks();
                     }
                 })
                 .setNegativeButton("关闭", null)
@@ -786,6 +999,30 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 })
                 .setNegativeButton("关闭", null)
                 .show();
+    }
+
+    private void exportBookmarks() {
+        if (!hasBook()) {
+            return;
+        }
+        List<Bookmark> bookmarks = progressStore.getBookmarks(currentBookUri.toString());
+        if (bookmarks.isEmpty()) {
+            Toast.makeText(this, "当前书籍暂无可导出的笔记", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("# ").append(currentBook.getTitle()).append(" 笔记\n\n");
+        for (Bookmark bookmark : bookmarks) {
+            builder.append("## 第 ").append(bookmark.chapterIndex + 1).append(" 章：").append(bookmark.chapterTitle).append("\n")
+                    .append("- 时间：").append(formatDate(bookmark.createdAt)).append("\n")
+                    .append("- 位置：").append(bookmark.scrollY).append("\n")
+                    .append("- 笔记：").append(bookmark.note.isEmpty() ? "无" : bookmark.note).append("\n\n");
+        }
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/markdown");
+        intent.putExtra(Intent.EXTRA_SUBJECT, currentBook.getTitle() + " 笔记");
+        intent.putExtra(Intent.EXTRA_TEXT, builder.toString());
+        startActivity(Intent.createChooser(intent, "导出笔记"));
     }
 
     private void speakCurrentChapter(boolean resume) {
@@ -959,7 +1196,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void saveAndApplySettings() {
-        progressStore.saveReadingSettings(textSize, lineSpacing, nightMode);
+        progressStore.saveReadingSettings(textSize, lineSpacing, nightMode, themeName);
         applyReadingTheme();
     }
 
@@ -972,9 +1209,26 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void applyReadingTheme() {
-        int background = nightMode ? 0xFF121212 : 0xFFFAFAF7;
-        int primary = nightMode ? 0xFFEDEDED : 0xFF1F1F1F;
-        int secondary = nightMode ? 0xFFBDBDBD : 0xFF666666;
+        int background;
+        int primary;
+        int secondary;
+        if ("night".equals(themeName)) {
+            background = 0xFF121212;
+            primary = 0xFFEDEDED;
+            secondary = 0xFFBDBDBD;
+        } else if ("eye".equals(themeName)) {
+            background = 0xFFEAF4E2;
+            primary = 0xFF1F2A1F;
+            secondary = 0xFF52624D;
+        } else if ("ink".equals(themeName)) {
+            background = 0xFFF8F8F4;
+            primary = Color.BLACK;
+            secondary = 0xFF555555;
+        } else {
+            background = 0xFFFAFAF7;
+            primary = 0xFF1F1F1F;
+            secondary = 0xFF666666;
+        }
         root.setBackgroundColor(background);
         titleView.setTextColor(primary);
         metaView.setTextColor(secondary);
@@ -984,7 +1238,18 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         contentView.setTextSize(textSize);
         contentView.setLineSpacing(dp(4), lineSpacing);
         if (currentBook == null || currentBook.getCoverImage() == null) {
-            coverView.setBackgroundColor(nightMode ? 0xFF303030 : 0xFFE0E0E0);
+            coverView.setBackgroundColor("night".equals(themeName) ? 0xFF303030 : 0xFFE0E0E0);
+        }
+    }
+
+    private void applyResponsiveLayout() {
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        int horizontalPadding = screenWidthDp >= 700 ? 48 : 12;
+        int verticalPadding = screenWidthDp >= 700 ? 18 : 10;
+        root.setPadding(dp(horizontalPadding), dp(verticalPadding), dp(horizontalPadding), dp(verticalPadding));
+        if (screenWidthDp >= 700) {
+            contentView.setMaxWidth(dp(760));
+            contentView.setGravity(Gravity.CENTER_HORIZONTAL);
         }
     }
 

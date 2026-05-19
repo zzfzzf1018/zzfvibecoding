@@ -1,7 +1,11 @@
 param(
     [string]$AndroidSdk = "C:\Program Files (x86)\Android\android-sdk",
     [string]$PlatformVersion = "android-36",
-    [string]$BuildToolsVersion = "36.0.0"
+    [string]$BuildToolsVersion = "36.0.0",
+    [string]$KeystorePath = "",
+    [string]$KeystoreAlias = "listeenb-release",
+    [string]$KeystorePassword = "android",
+    [string]$KeyPassword = "android"
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +13,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $platform = Join-Path $AndroidSdk "platforms\$PlatformVersion\android.jar"
 $buildTools = Join-Path $AndroidSdk "build-tools\$BuildToolsVersion"
-$out = Join-Path $root "build\manual"
+$out = Join-Path $root "build\manual-release"
 $compiled = Join-Path $out "compiled"
 $generated = Join-Path $out "gen"
 $classes = Join-Path $out "classes"
@@ -44,6 +48,10 @@ function Invoke-Checked {
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $compiled, $generated, $classes, $dex | Out-Null
 
+if ([string]::IsNullOrWhiteSpace($KeystorePath)) {
+    $KeystorePath = Join-Path $out "release.keystore"
+}
+
 Push-Location $root
 try {
     Invoke-Checked $aapt2 @("compile", "--dir", "app\src\main\res", "-o", $compiled)
@@ -56,27 +64,27 @@ try {
     Invoke-Checked "javac" (@("-source", "1.8", "-target", "1.8", "-encoding", "UTF-8", "-cp", $platform, "-d", $classes) + $sourceFiles)
 
     $classFiles = Get-ChildItem $classes -Recurse -Filter "*.class" | ForEach-Object { $_.FullName }
-    Invoke-Checked $d8 (@("--classpath", $platform, "--min-api", "23", "--output", $dex) + $classFiles)
+    Invoke-Checked $d8 (@("--classpath", $platform, "--min-api", "23", "--release", "--output", $dex) + $classFiles)
     $classesDex = Join-Path $dex "classes.dex"
     if (!(Test-Path $classesDex)) {
         throw "D8 did not generate classes.dex"
     }
 
-    $unsignedApk = Join-Path $out "app-unsigned.apk"
-    $alignedApk = Join-Path $out "app-aligned.apk"
-    $debugApk = Join-Path $out "app-debug.apk"
+    $unsignedApk = Join-Path $out "app-release-unsigned.apk"
+    $alignedApk = Join-Path $out "app-release-aligned.apk"
+    $releaseApk = Join-Path $out "app-release.apk"
     Copy-Item (Join-Path $out "resources.apk") $unsignedApk -Force
     Invoke-Checked "jar" @("uf", $unsignedApk, "-C", $dex, "classes.dex")
     Invoke-Checked $zipalign @("-f", "4", $unsignedApk, $alignedApk)
 
-    $keystore = Join-Path $out "debug.keystore"
-    if (!(Test-Path $keystore)) {
-        Invoke-Checked "keytool" @("-genkeypair", "-v", "-keystore", $keystore, "-storepass", "android", "-alias", "androiddebugkey", "-keypass", "android", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=Android Debug,O=Android,C=US")
+    if (!(Test-Path $KeystorePath)) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $KeystorePath) | Out-Null
+        Invoke-Checked "keytool" @("-genkeypair", "-v", "-keystore", $KeystorePath, "-storepass", $KeystorePassword, "-alias", $KeystoreAlias, "-keypass", $KeyPassword, "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=ListeenB Release,O=ListeenB,C=CN")
     }
 
-    Invoke-Checked $apksigner @("sign", "--ks", $keystore, "--ks-pass", "pass:android", "--key-pass", "pass:android", "--out", $debugApk, $alignedApk)
-    Invoke-Checked $apksigner @("verify", "--verbose", $debugApk)
-    Write-Host "APK generated: $debugApk"
+    Invoke-Checked $apksigner @("sign", "--ks", $KeystorePath, "--ks-key-alias", $KeystoreAlias, "--ks-pass", "pass:$KeystorePassword", "--key-pass", "pass:$KeyPassword", "--out", $releaseApk, $alignedApk)
+    Invoke-Checked $apksigner @("verify", "--verbose", $releaseApk)
+    Write-Host "Release APK generated: $releaseApk"
 } finally {
     Pop-Location
 }

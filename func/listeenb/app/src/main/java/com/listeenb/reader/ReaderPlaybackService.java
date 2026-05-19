@@ -5,10 +5,12 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.database.Cursor;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
@@ -17,6 +19,7 @@ import com.listeenb.reader.data.ProgressStore;
 import com.listeenb.reader.epub.EpubBook;
 import com.listeenb.reader.epub.EpubChapter;
 import com.listeenb.reader.epub.EpubParser;
+import com.listeenb.reader.epub.TextBookParser;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +50,7 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final EpubParser epubParser = new EpubParser();
+    private final TextBookParser textBookParser = new TextBookParser();
 
     private ProgressStore progressStore;
     private TextToSpeech textToSpeech;
@@ -153,7 +157,7 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         currentChapterIndex = Math.max(0, chapterIndex);
         executor.execute(() -> {
             try {
-                currentBook = epubParser.parse(getContentResolver(), uri);
+                currentBook = parseBook(uri);
                 if (currentChapterIndex >= currentBook.getChapters().size()) {
                     currentChapterIndex = currentBook.getChapters().size() - 1;
                 }
@@ -330,6 +334,28 @@ public class ReaderPlaybackService extends Service implements TextToSpeech.OnIni
         if (fallback != null) {
             textToSpeech.setVoice(fallback);
         }
+    }
+
+    private EpubBook parseBook(Uri uri) throws Exception {
+        String name = getDisplayName(uri);
+        String type = getContentResolver().getType(uri);
+        String lowerName = name == null ? "" : name.toLowerCase(Locale.US);
+        String lowerType = type == null ? "" : type.toLowerCase(Locale.US);
+        if (lowerName.endsWith(".txt") || lowerType.startsWith("text/")) {
+            return textBookParser.parse(getContentResolver(), uri, name);
+        }
+        return epubParser.parse(getContentResolver(), uri);
+    }
+
+    private String getDisplayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        } catch (Exception ignored) {
+        }
+        String path = uri.getLastPathSegment();
+        return path == null ? "本地书籍" : path;
     }
 
     private List<String> splitForTts(String text) {
