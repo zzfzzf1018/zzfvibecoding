@@ -38,7 +38,9 @@ public class EpubParser {
         Document packageDocument = parseXml(readText(entries, rootFile));
         String packageDir = parentDir(rootFile);
         String title = firstTextByName(packageDocument, "title");
+        String author = firstTextByName(packageDocument, "creator");
         Map<String, ManifestItem> manifest = readManifest(packageDocument, packageDir);
+        byte[] coverImage = findCoverImage(entries, packageDocument, manifest);
         List<String> spine = readSpine(packageDocument);
         List<EpubChapter> chapters = new ArrayList<>();
 
@@ -75,7 +77,7 @@ public class EpubParser {
         if (chapters.isEmpty()) {
             throw new IOException("未在 EPUB 中找到可阅读正文");
         }
-        return new EpubBook(title, chapters);
+        return new EpubBook(title, author, coverImage, chapters);
     }
 
     private Map<String, byte[]> readZipEntries(ContentResolver resolver, Uri uri) throws IOException {
@@ -165,11 +167,44 @@ public class EpubParser {
             String id = attr(attributes, "id");
             String href = attr(attributes, "href");
             String mediaType = attr(attributes, "media-type");
+            String properties = attr(attributes, "properties");
             if (!id.isEmpty() && !href.isEmpty()) {
-                items.put(id, new ManifestItem(resolvePath(packageDir, href), mediaType));
+                items.put(id, new ManifestItem(resolvePath(packageDir, href), mediaType, properties));
             }
         }
         return items;
+    }
+
+    private byte[] findCoverImage(Map<String, byte[]> entries, Document document, Map<String, ManifestItem> manifest) {
+        String coverId = "";
+        NodeList metas = document.getElementsByTagName("meta");
+        for (int index = 0; index < metas.getLength(); index++) {
+            Node node = metas.item(index);
+            String name = attr(node.getAttributes(), "name");
+            if ("cover".equalsIgnoreCase(name)) {
+                coverId = attr(node.getAttributes(), "content");
+                break;
+            }
+        }
+        if (!coverId.isEmpty() && manifest.containsKey(coverId)) {
+            byte[] image = entries.get(manifest.get(coverId).href);
+            if (image != null) {
+                return image;
+            }
+        }
+        for (ManifestItem item : manifest.values()) {
+            String mediaType = item.mediaType.toLowerCase(Locale.US);
+            String href = item.href.toLowerCase(Locale.US);
+            boolean likelyCover = item.properties.toLowerCase(Locale.US).contains("cover-image")
+                    || (href.contains("cover") && mediaType.startsWith("image/"));
+            if (likelyCover) {
+                byte[] image = entries.get(item.href);
+                if (image != null) {
+                    return image;
+                }
+            }
+        }
+        return null;
     }
 
     private List<String> readSpine(Document document) {
@@ -299,10 +334,12 @@ public class EpubParser {
     private static class ManifestItem {
         final String href;
         final String mediaType;
+        final String properties;
 
-        ManifestItem(String href, String mediaType) {
+        ManifestItem(String href, String mediaType, String properties) {
             this.href = href;
             this.mediaType = mediaType == null ? "" : mediaType;
+            this.properties = properties == null ? "" : properties;
         }
     }
 }
