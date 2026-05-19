@@ -147,32 +147,57 @@ class ReaderActivity : AppCompatActivity() {
         currentChapter = index.coerceIn(0, b.chapters.lastIndex)
         pendingScrollY = scrollY
         seekChapter.progress = currentChapter
-        val html = buildHtml(b.chapters[currentChapter].bodyHtml)
+        val html = buildHtml(b.chapters[currentChapter])
         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         saveProgress()
         if (ttsActive) startTtsForCurrentChapter()
     }
 
-    private fun buildHtml(bodyHtml: String): String {
+    private fun buildHtml(chapter: com.lisb.reader.epub.EpubBook.Chapter): String {
         val theme = settings.theme
         val font = settings.fontFamily
         val size = settings.fontSizePx
         val lh = settings.lineHeight
-        return """
-            <!DOCTYPE html>
-            <html><head><meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-            <style>
-              html,body{margin:0;padding:0;${theme.css}}
-              body{font-family:${font.css};font-size:${size}px;line-height:$lh;
-                   padding:24px 20px 32px 20px;text-align:justify;word-wrap:break-word;}
-              p{margin:0 0 0.9em 0;text-indent:2em;}
-              h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;}
-              img{max-width:100%;height:auto;}
-              a{color:inherit;text-decoration:none;}
-            </style></head>
-            <body>$bodyHtml</body></html>
-        """.trimIndent()
+
+        return if (settings.preserveEpubStyle) {
+            // Preserve EPUB's original head/style, overlay only a minimal theme
+            // layer at the END so it wins by source-order without overriding
+            // structural typography (margins / indents / fonts) from the book.
+            val overlay = """
+                <style id="lisb-theme-overlay">
+                  html,body{${theme.css}}
+                  body{padding:24px 20px 32px 20px;}
+                  img{max-width:100%;height:auto;}
+                </style>
+            """.trimIndent()
+            """
+                <!DOCTYPE html>
+                <html><head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+                ${chapter.headHtml}
+                $overlay
+                </head>
+                <body>${chapter.bodyHtml}</body></html>
+            """.trimIndent()
+        } else {
+            // Clean template: throw away the EPUB's styles and use ours.
+            """
+                <!DOCTYPE html>
+                <html><head><meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+                <style>
+                  html,body{margin:0;padding:0;${theme.css}}
+                  body{font-family:${font.css};font-size:${size}px;line-height:$lh;
+                       padding:24px 20px 32px 20px;text-align:justify;word-wrap:break-word;}
+                  p{margin:0 0 0.9em 0;text-indent:2em;}
+                  h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;}
+                  img{max-width:100%;height:auto;}
+                  a{color:inherit;text-decoration:none;}
+                </style></head>
+                <body>${chapter.bodyHtml}</body></html>
+            """.trimIndent()
+        }
     }
 
     private fun goNextPage() {
@@ -274,6 +299,9 @@ class ReaderActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
+        val preserveBox = dialogView.findViewById<android.widget.CheckBox>(R.id.preserveStyle)
+        preserveBox.isChecked = settings.preserveEpubStyle
+        preserveBox.setOnCheckedChangeListener { _, checked -> settings.preserveEpubStyle = checked }
         AlertDialog.Builder(this).setTitle("字体设置").setView(dialogView)
             .setPositiveButton("确定") { _, _ -> reloadCurrentChapter() }
             .setNegativeButton("取消", null).show()

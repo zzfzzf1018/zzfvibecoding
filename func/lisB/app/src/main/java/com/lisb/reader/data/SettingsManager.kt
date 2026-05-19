@@ -57,6 +57,15 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getFloat(KEY_TTS_RATE, 1.0f)
         set(value) = prefs.edit { putFloat(KEY_TTS_RATE, value) }
 
+    /**
+     * When true, the EPUB's own <head>/<style>/inline CSS are kept and only
+     * theme colors (+ optionally font size) are overlaid on top. When false,
+     * EPUB styling is discarded and our clean reader template is used.
+     */
+    var preserveEpubStyle: Boolean
+        get() = prefs.getBoolean(KEY_PRESERVE_STYLE, true)
+        set(value) = prefs.edit { putBoolean(KEY_PRESERVE_STYLE, value) }
+
     data class Progress(val chapter: Int, val scrollY: Int, val updatedAt: Long)
 
     fun saveProgress(bookId: String, chapter: Int, scrollY: Int) {
@@ -122,6 +131,7 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         private const val KEY_BRIGHTNESS = "brightness"
         private const val KEY_TTS_RATE = "tts_rate"
         private const val KEY_SHELF = "shelf"
+        private const val KEY_PRESERVE_STYLE = "preserve_epub_style"
 
         @Volatile private var inst: SettingsManager? = null
         fun get(context: Context): SettingsManager = inst ?: synchronized(this) {
