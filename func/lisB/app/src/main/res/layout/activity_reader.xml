@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <com.lisb.reader.ui.ReaderActivity$TouchOverlay
+        android:id="@+id/touchOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <!-- Top menu -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#E6202020"
+        android:padding="12dp"
+        android:elevation="8dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="返回"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#FFFFFF"/>
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text=""/>
+    </LinearLayout>
+
+    <!-- Bottom menu -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="#E6202020"
+        android:padding="12dp"
+        android:elevation="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/progressText"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:textColor="#DDDDDD"
+                android:textSize="13sp"/>
+
+            <SeekBar
+                android:id="@+id/seekChapter"
+                android:layout_width="0dp"
+                android:layout_weight="2"
+                android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:weightSum="5">
+
+            <TextView android:id="@+id/btnToc" style="@style/ReaderMenuButton" android:text="目录"/>
+            <TextView android:id="@+id/btnFont" style="@style/ReaderMenuButton" android:text="字体"/>
+            <TextView android:id="@+id/btnTheme" style="@style/ReaderMenuButton" android:text="主题"/>
+            <TextView android:id="@+id/btnBrightness" style="@style/ReaderMenuButton" android:text="亮度"/>
+            <TextView android:id="@+id/btnTts" style="@style/ReaderMenuButton" android:text="朗读"/>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

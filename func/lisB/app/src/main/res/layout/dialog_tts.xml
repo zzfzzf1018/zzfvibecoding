@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView android:id="@+id/rateLabel"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="语速" android:textStyle="bold" android:textSize="15sp"/>
+
+    <SeekBar android:id="@+id/rateSeek"
+        android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="#666"
+        android:textSize="12sp"
+        android:text="使用系统 TTS 引擎；朗读完当前章节会自动翻到下一章。"/>
+</LinearLayout>

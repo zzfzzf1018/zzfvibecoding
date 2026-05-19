@@ -1,0 +1,132 @@
+package com.lisb.reader.data
+
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.core.content.edit
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** Persists user settings + reading progress + bookshelf. */
+class SettingsManager private constructor(private val prefs: SharedPreferences) {
+
+    enum class Theme(val css: String, val label: String) {
+        LIGHT("background:#FFFFFF;color:#1A1A1A;", "白天"),
+        SEPIA("background:#F4ECD8;color:#5B4636;", "护眼"),
+        DARK("background:#121212;color:#D6D6D6;", "夜间"),
+        BLACK("background:#000000;color:#9E9E9E;", "纯黑");
+
+        companion object {
+            fun fromName(n: String?): Theme = values().firstOrNull { it.name == n } ?: LIGHT
+        }
+    }
+
+    enum class FontFamily(val css: String, val label: String) {
+        SERIF("'Noto Serif', 'Source Han Serif', serif", "宋体"),
+        SANS("'Noto Sans', 'PingFang SC', 'Source Han Sans', sans-serif", "黑体"),
+        SYSTEM("system-ui, sans-serif", "系统");
+
+        companion object {
+            fun fromName(n: String?): FontFamily = values().firstOrNull { it.name == n } ?: SERIF
+        }
+    }
+
+    var theme: Theme
+        get() = Theme.fromName(prefs.getString(KEY_THEME, null))
+        set(value) = prefs.edit { putString(KEY_THEME, value.name) }
+
+    var fontFamily: FontFamily
+        get() = FontFamily.fromName(prefs.getString(KEY_FONT, null))
+        set(value) = prefs.edit { putString(KEY_FONT, value.name) }
+
+    /** Font size in CSS px. */
+    var fontSizePx: Int
+        get() = prefs.getInt(KEY_FONT_SIZE, 20).coerceIn(12, 40)
+        set(value) = prefs.edit { putInt(KEY_FONT_SIZE, value.coerceIn(12, 40)) }
+
+    var lineHeight: Float
+        get() = prefs.getFloat(KEY_LINE_HEIGHT, 1.7f)
+        set(value) = prefs.edit { putFloat(KEY_LINE_HEIGHT, value) }
+
+    /** Brightness override (0..1), -1 = system default. */
+    var brightness: Float
+        get() = prefs.getFloat(KEY_BRIGHTNESS, -1f)
+        set(value) = prefs.edit { putFloat(KEY_BRIGHTNESS, value) }
+
+    /** TTS speech rate. */
+    var ttsRate: Float
+        get() = prefs.getFloat(KEY_TTS_RATE, 1.0f)
+        set(value) = prefs.edit { putFloat(KEY_TTS_RATE, value) }
+
+    data class Progress(val chapter: Int, val scrollY: Int, val updatedAt: Long)
+
+    fun saveProgress(bookId: String, chapter: Int, scrollY: Int) {
+        prefs.edit {
+            putInt(progKey(bookId, "ch"), chapter)
+            putInt(progKey(bookId, "y"), scrollY)
+            putLong(progKey(bookId, "t"), System.currentTimeMillis())
+        }
+    }
+
+    fun loadProgress(bookId: String): Progress? {
+        if (!prefs.contains(progKey(bookId, "ch"))) return null
+        return Progress(
+            prefs.getInt(progKey(bookId, "ch"), 0),
+            prefs.getInt(progKey(bookId, "y"), 0),
+            prefs.getLong(progKey(bookId, "t"), 0L)
+        )
+    }
+
+    // ---- Bookshelf (list of imported books) ----
+
+    data class ShelfEntry(val id: String, val title: String, val author: String, val addedAt: Long)
+
+    fun addToShelf(entry: ShelfEntry) {
+        val list = getShelf().toMutableList()
+        if (list.any { it.id == entry.id }) return
+        list.add(entry)
+        writeShelf(list)
+    }
+
+    fun removeFromShelf(id: String) {
+        writeShelf(getShelf().filterNot { it.id == id })
+    }
+
+    fun getShelf(): List<ShelfEntry> {
+        val json = prefs.getString(KEY_SHELF, null) ?: return emptyList()
+        val arr = JSONArray(json)
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            ShelfEntry(o.getString("id"), o.getString("title"), o.getString("author"), o.getLong("addedAt"))
+        }
+    }
+
+    private fun writeShelf(list: List<ShelfEntry>) {
+        val arr = JSONArray()
+        list.forEach { e ->
+            arr.put(JSONObject().apply {
+                put("id", e.id); put("title", e.title)
+                put("author", e.author); put("addedAt", e.addedAt)
+            })
+        }
+        prefs.edit { putString(KEY_SHELF, arr.toString()) }
+    }
+
+    private fun progKey(bookId: String, k: String) = "progress_${bookId}_$k"
+
+    companion object {
+        private const val PREFS = "lisb_prefs"
+        private const val KEY_THEME = "theme"
+        private const val KEY_FONT = "font"
+        private const val KEY_FONT_SIZE = "font_size"
+        private const val KEY_LINE_HEIGHT = "line_height"
+        private const val KEY_BRIGHTNESS = "brightness"
+        private const val KEY_TTS_RATE = "tts_rate"
+        private const val KEY_SHELF = "shelf"
+
+        @Volatile private var inst: SettingsManager? = null
+        fun get(context: Context): SettingsManager = inst ?: synchronized(this) {
+            inst ?: SettingsManager(context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
+                .also { inst = it }
+        }
+    }
+}

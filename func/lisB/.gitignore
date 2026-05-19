@@ -1,0 +1,31 @@
+.gradle/
+.idea/
+local.properties
+.externalNativeBuild/
+.cxx/
+build/
+app/build/
+captures/
+*.iml
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.log
+
+# Signing keys and local secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Generated manual build outputs
+build/manual/
+build/manual-release/
+build/keystores/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
