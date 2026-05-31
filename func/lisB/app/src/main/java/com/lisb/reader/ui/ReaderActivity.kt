@@ -400,8 +400,8 @@ class ReaderActivity : AppCompatActivity() {
                 <style id="lisb-theme-overlay">
                   html,body{${theme.css}}
                   html,body{overflow:hidden!important;height:100%!important;margin:0!important;padding:0!important;}
-                  body{padding:0 20px!important;}
-                  #lisb-content{will-change:transform;}
+                  body{padding:0!important;}
+                  #lisb-wrapper{height:100%;overflow:hidden;padding:0 20px;box-sizing:border-box;}
                   $fontColorRule
                   img{max-width:100%;height:auto;}
                 </style>
@@ -415,7 +415,7 @@ class ReaderActivity : AppCompatActivity() {
                 $overlay
                 $READER_JS
                 </head>
-                <body><div id="lisb-content">${effectiveBody}</div></body></html>
+                <body><div id="lisb-wrapper"><div id="lisb-content">${effectiveBody}</div></div></body></html>
             """.trimIndent()
         } else {
             val colorCss = if (fc.isNotBlank()) "color:$fc;" else ""
@@ -427,8 +427,8 @@ class ReaderActivity : AppCompatActivity() {
                   html,body{margin:0;padding:0;overflow:hidden;height:100%;${theme.css}}
                   body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                        letter-spacing:${"%.3f".format(ls)}em;
-                       padding:0 20px;text-align:justify;word-wrap:break-word;$colorCss}
-                  #lisb-content{will-change:transform;}
+                       padding:0;text-align:justify;word-wrap:break-word;$colorCss}
+                  #lisb-wrapper{height:100%;overflow:hidden;padding:0 20px;box-sizing:border-box;}
                   p{margin:0 0 0.9em 0;text-indent:2em;}
                   h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;letter-spacing:0;}
                   img{max-width:100%;height:auto;}
@@ -436,7 +436,7 @@ class ReaderActivity : AppCompatActivity() {
                 </style>
                 $READER_JS
                 </head>
-                <body><div id="lisb-content">${effectiveBody}</div></body></html>
+                <body><div id="lisb-wrapper"><div id="lisb-content">${effectiveBody}</div></div></body></html>
             """.trimIndent()
         }
     }
@@ -480,8 +480,8 @@ class ReaderActivity : AppCompatActivity() {
               html,body{margin:0;padding:0;overflow:hidden;height:100%;${theme.css}}
               body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                    letter-spacing:${"%.3f".format(ls)}em;
-                   padding:0 20px;text-align:justify;word-wrap:break-word;$colorCss}
-              #lisb-content{will-change:transform;}
+                   padding:0;text-align:justify;word-wrap:break-word;$colorCss}
+              #lisb-wrapper{height:100%;overflow:hidden;padding:0 20px;box-sizing:border-box;}
               .tts-chunk{transition:background-color .15s;border-radius:3px;padding:0 1px;}
               .tts-active{$highlightCss}
               img{max-width:100%;height:auto;}
@@ -514,7 +514,7 @@ class ReaderActivity : AppCompatActivity() {
               }
             </script>
             </head>
-            <body><div id="lisb-content">${body}</div></body></html>
+            <body><div id="lisb-wrapper"><div id="lisb-content">${body}</div></div></body></html>
         """.trimIndent()
     }
 
@@ -1057,29 +1057,23 @@ class ReaderActivity : AppCompatActivity() {
          *  and snaps page boundaries to it, eliminating clipped half-lines). */
         private const val READER_JS = """
             <script>
-              // Virtual-scroll engine. html/body are overflow:hidden so the
-              // user CANNOT free-drag the page. The chapter content lives
-              // inside #lisb-content, which we translate with CSS transform.
+              // Scroll-based pagination engine.
+              // #lisb-wrapper (overflow:hidden, height:100%) is the scroll
+              // container. We set wrapper.scrollTop programmatically to
+              // navigate between pages. The wrapper's overflow:hidden clips
+              // content at its exact boundary — no CSS transform needed.
               //
-              // Pagination strategy: we DO NOT assume "page step = N lines"
-              // because paragraph margins, headings, images, and inline-
-              // styled EPUB CSS make consecutive lines land at irregular
-              // y-offsets. Instead we enumerate the y-top of EVERY rendered
-              // text line via Range.getClientRects() and then build the page
-              // list by repeatedly stepping forward to the first line whose
-              // top exceeds the previous page's effective bottom. This
-              // guarantees that no page boundary ever cuts a line in half.
+              // Pagination: enumerate every rendered text line via
+              // Range.getClientRects(), then build a pages[] array by
+              // stepping forward to the first line whose bottom exceeds
+              // the wrapper's visible height.
               window.__lisbLh=null;
               window.__lisbY=0;
               window.__lisbLines=null;
               window.__lisbPages=null;
-              // Suppress stale TTS highlight callbacks: when ReaderActivity
-              // restarts speech at a new chunk, it bumps this value first.
-              // Highlights for chunks < __lisbMinChunk are dropped so that
-              // a late-arriving onStart from the previous utterance can't
-              // auto-scroll the page back.
               window.__lisbMinChunk=0;
               function lisbC(){return document.getElementById('lisb-content');}
+              function lisbW(){return document.getElementById('lisb-wrapper');}
               function lisbInit(){
                 try{
                   var s=getComputedStyle(document.body);
@@ -1092,7 +1086,6 @@ class ReaderActivity : AppCompatActivity() {
                   if(c){
                     c.style.paddingTop=Math.round(lh*0.5)+'px';
                     c.style.paddingBottom=Math.round(lh*0.5)+'px';
-                    c.style.position='relative';
                     var fc=c.firstElementChild;
                     if(fc){fc.style.marginTop='0';fc.style.paddingTop='0';}
                     var lc=c.lastElementChild;
@@ -1104,9 +1097,12 @@ class ReaderActivity : AppCompatActivity() {
               }
               function lisbBuildLines(){
                 var c=lisbC();
-                if(!c){window.__lisbLines=[];return;}
-                var savedTransform=c.style.transform;
-                c.style.transform='translateY(0)';
+                var w=lisbW();
+                if(!c||!w){window.__lisbLines=[];return;}
+                // Scroll to top for measurement so getClientRects returns
+                // absolute offsets from the wrapper's top edge.
+                var savedScroll=w.scrollTop;
+                w.scrollTop=0;
                 var arr=[];
                 try{
                   var walker=document.createTreeWalker(c,NodeFilter.SHOW_TEXT,null);
@@ -1120,18 +1116,17 @@ class ReaderActivity : AppCompatActivity() {
                     for(var i=0;i<rects.length;i++){
                       var rc=rects[i];
                       if(rc.width<1||rc.height<1)continue;
-                      arr.push({t:Math.round(rc.top),b:Math.round(rc.bottom)});
+                      arr.push({t:Math.round(rc.top),b:Math.ceil(rc.bottom)});
                     }
                   }
-                  // Also include images as "lines" so pages don't clip them.
                   var imgs=c.querySelectorAll('img');
                   for(var i=0;i<imgs.length;i++){
                     var rc=imgs[i].getBoundingClientRect();
                     if(rc.width<1||rc.height<1)continue;
-                    arr.push({t:Math.round(rc.top),b:Math.round(rc.bottom)});
+                    arr.push({t:Math.round(rc.top),b:Math.ceil(rc.bottom)});
                   }
                 }catch(e){}
-                c.style.transform=savedTransform;
+                w.scrollTop=savedScroll;
                 arr.sort(function(a,b){return a.t-b.t;});
                 var out=[];
                 for(var i=0;i<arr.length;i++){
@@ -1147,15 +1142,11 @@ class ReaderActivity : AppCompatActivity() {
                 if(window.__lisbLh==null)lisbInit();
                 if(window.__lisbLines==null)lisbBuildLines();
                 var lines=window.__lisbLines||[];
-                var lh=window.__lisbLh||30;
-                // Subtract one full line-height as safety margin from the
-                // usable viewport. This ensures the last line on every page
-                // is fully visible even with descenders, fractional-px
-                // rounding on HarmonyOS/MIUI, and any device-specific
-                // viewport discrepancy. The trade-off is one fewer line per
-                // page — negligible on modern screens (40+ lines).
-                var vh=window.innerHeight-lh;
-                if(vh<lh*3)vh=window.innerHeight; // fallback for tiny screens
+                // Use wrapper.clientHeight as the exact visible area.
+                // This is the same value that overflow:hidden clips at,
+                // so there is zero discrepancy.
+                var w=lisbW();
+                var vh=w?w.clientHeight:window.innerHeight;
                 var maxY=lisbMaxY();
                 var pages=[0];
                 if(maxY<=0){window.__lisbPages=pages;return;}
@@ -1183,16 +1174,16 @@ class ReaderActivity : AppCompatActivity() {
                 window.__lisbPages=pages;
               }
               function lisbMaxY(){
-                var c=lisbC();
-                if(!c)return 0;
-                return Math.max(0,c.scrollHeight-window.innerHeight);
+                var w=lisbW();
+                if(!w)return 0;
+                return Math.max(0,w.scrollHeight-w.clientHeight);
               }
               function lisbApplyY(y){
                 var maxY=lisbMaxY();
                 if(y<0)y=0; if(y>maxY)y=maxY;
                 window.__lisbY=y;
-                var c=lisbC();
-                if(c)c.style.transform='translateY('+(-y)+'px)';
+                var w=lisbW();
+                if(w)w.scrollTop=y;
               }
               function lisbSetY(y){
                 if(window.__lisbPages==null)lisbBuildPages();
@@ -1232,7 +1223,7 @@ class ReaderActivity : AppCompatActivity() {
                 lisbBuildPages();
                 lisbSetupImgZoom();
               }
-              // --- Image click-to-zoom overlay ---
+              // --- Image click-to-zoom overlay with pinch-zoom ---
               window.__lisbZoomShown=false;
               function lisbIsZoomShown(){return window.__lisbZoomShown;}
               function lisbSetupImgZoom(){
@@ -1240,10 +1231,30 @@ class ReaderActivity : AppCompatActivity() {
                 if(!overlay){
                   overlay=document.createElement('div');
                   overlay.id='lisb-img-overlay';
-                  overlay.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;align-items:center;justify-content:center;';
-                  overlay.innerHTML='<img id=\"lisb-img-zoom\" style=\"max-width:95%;max-height:95%;object-fit:contain;\"/>';
+                  overlay.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;align-items:center;justify-content:center;touch-action:none;';
+                  overlay.innerHTML='<img id=\"lisb-img-zoom\" style=\"max-width:95%;max-height:95%;object-fit:contain;transform-origin:center center;\"/>';
                   document.body.appendChild(overlay);
+                  var scale=1,startDist=0,startScale=1;
+                  function getDist(e){var t=e.touches;return Math.hypot(t[1].pageX-t[0].pageX,t[1].pageY-t[0].pageY);}
+                  overlay.addEventListener('touchstart',function(e){
+                    if(e.touches.length===2){startDist=getDist(e);startScale=scale;e.preventDefault();}
+                  },{passive:false});
+                  overlay.addEventListener('touchmove',function(e){
+                    if(e.touches.length===2&&startDist>0){
+                      var d=getDist(e);
+                      scale=Math.max(1,Math.min(5,startScale*(d/startDist)));
+                      var img=document.getElementById('lisb-img-zoom');
+                      if(img)img.style.transform='scale('+scale+')';
+                      e.preventDefault();
+                    }
+                  },{passive:false});
+                  overlay.addEventListener('touchend',function(e){
+                    if(e.touches.length<2)startDist=0;
+                  });
                   overlay.addEventListener('click',function(){
+                    scale=1;
+                    var img=document.getElementById('lisb-img-zoom');
+                    if(img)img.style.transform='scale(1)';
                     overlay.style.display='none';
                     window.__lisbZoomShown=false;
                   });
@@ -1256,17 +1267,14 @@ class ReaderActivity : AppCompatActivity() {
                     var ov=document.getElementById('lisb-img-overlay');
                     var z=document.getElementById('lisb-img-zoom');
                     z.src=this.src;
+                    z.style.transform='scale(1)';
                     ov.style.display='flex';
                     window.__lisbZoomShown=true;
                   });
                 }
               }
-              // Run after fonts and images settle. window.load fires after
-              // all sub-resources, so line metrics are final by then.
               window.addEventListener('load',function(){
                 lisbInitAll();
-                // Rebuild once more after a microtask: some EPUB CSS that
-                // loads via <link> may finish layout in a follow-up tick.
                 setTimeout(lisbInitAll,50);
               });
             </script>
