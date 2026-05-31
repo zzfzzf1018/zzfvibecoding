@@ -82,7 +82,12 @@ class ReaderActivity : AppCompatActivity() {
             ttsService?.onAllFinishedExternal = { runOnUiThread { onChapterTtsFinished() } }
             ttsService?.onChapterChangedExternal = { idx ->
                 runOnUiThread {
-                    if (idx != currentChapter) loadChapter(idx, scrollY = 0, skipTtsRestart = true)
+                    if (idx != currentChapter) {
+                        // The service auto-advanced to a new chapter.
+                        // Load it in TTS mode; onPageFinished will pick up
+                        // highlights from the service's onChunkStart callbacks.
+                        loadChapter(idx, scrollY = 0, skipTtsRestart = true)
+                    }
                 }
             }
             ttsService?.onChunkStartExternal = { idx ->
@@ -315,7 +320,10 @@ class ReaderActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val target = seekBar?.progress ?: return
-                if (target != currentChapter) loadChapter(target, scrollY = 0)
+                if (target != currentChapter) {
+                    if (isTtsActive) { ttsService?.doStop(); stopTtsModeAndRestore() }
+                    loadChapter(target, scrollY = 0)
+                }
             }
         })
     }
@@ -538,12 +546,18 @@ class ReaderActivity : AppCompatActivity() {
     private fun currentPageInChapter(): Int = currentPage
 
     private fun goNextPage() {
+        // During active TTS playback, page turn is blocked. User must pause
+        // first. This avoids the complex state-sync issues (BUG 3 request).
+        if (isTtsActive && ttsService?.playing == true) {
+            ttsService?.doPause()
+            Toast.makeText(this, "已暂停朗读，再次点击可翻页", Toast.LENGTH_SHORT).show()
+            return
+        }
         webView.evaluateJavascript("lisbScrollByPage(1)") { raw ->
             val v = raw?.trim('"') ?: return@evaluateJavascript
             if (v == "NEXT_CHAPTER") {
                 val b = book ?: return@evaluateJavascript
                 if (currentChapter < b.chapters.lastIndex) {
-                    if (isTtsActive) pendingTtsStartChunk = 0
                     loadChapter(currentChapter + 1, scrollY = 0)
                 } else {
                     Toast.makeText(this, "已是最后一页", Toast.LENGTH_SHORT).show()
@@ -551,18 +565,21 @@ class ReaderActivity : AppCompatActivity() {
             } else {
                 applyPageInfo(raw) {
                     saveProgress(); updateProgressText(); updateIndicators()
-                    if (isTtsActive) syncTtsAfterPage()
                 }
             }
         }
     }
 
     private fun goPreviousPage() {
+        if (isTtsActive && ttsService?.playing == true) {
+            ttsService?.doPause()
+            Toast.makeText(this, "已暂停朗读，再次点击可翻页", Toast.LENGTH_SHORT).show()
+            return
+        }
         webView.evaluateJavascript("lisbScrollByPage(-1)") { raw ->
             val v = raw?.trim('"') ?: return@evaluateJavascript
             if (v == "PREV_CHAPTER") {
                 if (currentChapter > 0) {
-                    if (isTtsActive) pendingTtsStartChunk = 0
                     loadChapter(currentChapter - 1, scrollY = Int.MAX_VALUE / 2)
                 } else {
                     Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
@@ -570,25 +587,8 @@ class ReaderActivity : AppCompatActivity() {
             } else {
                 applyPageInfo(raw) {
                     saveProgress(); updateProgressText(); updateIndicators()
-                    if (isTtsActive) syncTtsAfterPage()
                 }
             }
-        }
-    }
-
-    /** When the user manually pages while TTS is playing, jump the TTS
-     *  pointer to the first sentence visible on the new page so the voice
-     *  follows the eye. Uses the ALREADY-UPDATED currentVirtualY (set by
-     *  applyPageInfo before this is called). */
-    private fun syncTtsAfterPage() {
-        val svc = ttsService ?: return
-        if (!isTtsActive) return
-        if (!svc.playing) return
-        val y = currentVirtualY
-        webView.evaluateJavascript("lisbFirstChunkAt($y)") { raw ->
-            val v = raw?.trim('"')?.toIntOrNull() ?: return@evaluateJavascript
-            webView.evaluateJavascript("lisbSetMinChunk($v)", null)
-            svc.startSpeaking(currentChapter, v)
         }
     }
 
@@ -766,6 +766,9 @@ class ReaderActivity : AppCompatActivity() {
         val titles = b.chapters.mapIndexed { i, c -> "${i + 1}. ${c.title}" }.toTypedArray()
         AlertDialog.Builder(this).setTitle("目录")
             .setSingleChoiceItems(titles, currentChapter) { d, which ->
+                if (which != currentChapter && isTtsActive) {
+                    ttsService?.doStop(); stopTtsModeAndRestore()
+                }
                 loadChapter(which, scrollY = 0); d.dismiss()
             }.setNegativeButton("关闭", null).show()
     }
@@ -882,7 +885,7 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun reloadCurrentChapter() {
-        loadChapter(currentChapter, scrollY = webView.scrollY)
+        loadChapter(currentChapter, scrollY = currentVirtualY)
     }
 
     // ==================== TTS ====================
@@ -895,11 +898,15 @@ class ReaderActivity : AppCompatActivity() {
             return
         }
         if (isTtsActive && svc != null) {
-            // TTS is loaded but paused — give the user a clear next step.
+            // TTS is loaded but paused — offer resume or restart from current page.
+            val b = book ?: return
+            val currentChunkIdx = currentPageChunkIndex(b.chapters[currentChapter].plainText)
             AlertDialog.Builder(this).setTitle("朗读已暂停")
-                .setPositiveButton("继续") { _, _ -> svc.doResume() }
-                .setNegativeButton("停止") { _, _ -> svc.doStop(); stopTtsModeAndRestore() }
-                .setNeutralButton("取消", null)
+                .setPositiveButton("继续上次位置") { _, _ -> svc.doResume() }
+                .setNegativeButton("从当前页开始") { _, _ ->
+                    startSpeakingHere(currentChapter, currentChunkIdx)
+                }
+                .setNeutralButton("停止朗读") { _, _ -> svc.doStop(); stopTtsModeAndRestore() }
                 .show()
             return
         }
@@ -952,9 +959,13 @@ class ReaderActivity : AppCompatActivity() {
     private fun currentPageChunkIndex(plainText: String): Int {
         val chunks = TtsManager.splitForTts(plainText)
         if (chunks.isEmpty()) return 0
-        val contentPx = (webView.contentHeight * resources.displayMetrics.density).toInt()
-        val visible = max(1, contentPx - webView.height)
-        val ratio = webView.scrollY.toFloat() / visible.toFloat()
+        // Use the virtual scroll Y (CSS px) since WebView native scroll is
+        // always 0 in our overflow:hidden virtual-scroll architecture.
+        val maxY = currentTotal.let { total ->
+            if (total <= 1) 1 else total - 1
+        }
+        val ratio = if (currentTotal <= 1) 0f
+                    else (currentPage - 1).toFloat() / maxY.toFloat()
         return (chunks.size * ratio.coerceIn(0f, 1f)).toInt().coerceIn(0, chunks.lastIndex)
     }
 
@@ -977,7 +988,7 @@ class ReaderActivity : AppCompatActivity() {
             // First-time switch into TTS mode: reload the current chapter
             // with chunk spans, then start speaking after onPageFinished.
             pendingTtsStartChunk = startChunk
-            loadChapter(currentChapter, scrollY = webView.scrollY, skipTtsRestart = true)
+            loadChapter(currentChapter, scrollY = currentVirtualY, skipTtsRestart = true)
             return
         }
         ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
@@ -1009,7 +1020,7 @@ class ReaderActivity : AppCompatActivity() {
     private fun stopTtsModeAndRestore() {
         if (!isTtsActive) return
         isTtsActive = false
-        loadChapter(currentChapter, scrollY = webView.scrollY, skipTtsRestart = true)
+        loadChapter(currentChapter, scrollY = currentVirtualY, skipTtsRestart = true)
     }
 
     private fun ensureNotificationPermission() {
@@ -1091,8 +1102,6 @@ class ReaderActivity : AppCompatActivity() {
               function lisbBuildLines(){
                 var c=lisbC();
                 if(!c){window.__lisbLines=[];return;}
-                // Must measure with content un-translated so offsets are
-                // absolute in #lisb-content's coordinate space.
                 var savedTransform=c.style.transform;
                 c.style.transform='translateY(0)';
                 var arr=[];
@@ -1108,15 +1117,26 @@ class ReaderActivity : AppCompatActivity() {
                     for(var i=0;i<rects.length;i++){
                       var rc=rects[i];
                       if(rc.width<1||rc.height<1)continue;
-                      arr.push(Math.round(rc.top));
+                      arr.push({t:Math.round(rc.top),b:Math.round(rc.bottom)});
                     }
+                  }
+                  // Also include images as "lines" so pages don't clip them.
+                  var imgs=c.querySelectorAll('img');
+                  for(var i=0;i<imgs.length;i++){
+                    var rc=imgs[i].getBoundingClientRect();
+                    if(rc.width<1||rc.height<1)continue;
+                    arr.push({t:Math.round(rc.top),b:Math.round(rc.bottom)});
                   }
                 }catch(e){}
                 c.style.transform=savedTransform;
-                arr.sort(function(a,b){return a-b;});
+                arr.sort(function(a,b){return a.t-b.t;});
                 var out=[];
                 for(var i=0;i<arr.length;i++){
-                  if(out.length===0||arr[i]-out[out.length-1]>2)out.push(arr[i]);
+                  if(out.length===0||arr[i].t-out[out.length-1].t>2){
+                    out.push(arr[i]);
+                  } else {
+                    if(arr[i].b>out[out.length-1].b)out[out.length-1].b=arr[i].b;
+                  }
                 }
                 window.__lisbLines=out;
               }
@@ -1124,23 +1144,23 @@ class ReaderActivity : AppCompatActivity() {
                 if(window.__lisbLh==null)lisbInit();
                 if(window.__lisbLines==null)lisbBuildLines();
                 var lines=window.__lisbLines||[];
-                var lh=window.__lisbLh||30;
                 var vh=window.innerHeight;
                 var maxY=lisbMaxY();
                 var pages=[0];
                 if(maxY<=0){window.__lisbPages=pages;return;}
                 var py=0,guard=0;
                 while(guard++<99999){
-                  var threshold=py+vh-lh;
+                  // A line fits on the current page (starting at py) iff its
+                  // BOTTOM <= py + vh. Find the first line that does NOT fit.
                   var next=-1;
                   for(var i=0;i<lines.length;i++){
-                    if(lines[i]>threshold){next=lines[i];break;}
+                    if(lines[i].t<=py)continue; // already on this or earlier page
+                    if(lines[i].b>py+vh){
+                      next=lines[i].t;
+                      break;
+                    }
                   }
                   if(next<0||next<=py+1)break;
-                  // Clamp: if this page-top exceeds maxY, use maxY as the
-                  // final page and stop. This prevents the "stuck on second-
-                  // to-last page" bug where lisbApplyY clamps to maxY which
-                  // doesn't match any entry in pages[].
                   if(next>maxY){
                     if(pages[pages.length-1]<maxY)pages.push(maxY);
                     break;
@@ -1148,9 +1168,7 @@ class ReaderActivity : AppCompatActivity() {
                   pages.push(next);
                   py=next;
                 }
-                // Ensure maxY is always reachable as the final page so the
-                // user can always reach the true end of a chapter.
-                if(pages[pages.length-1]<maxY && maxY-pages[pages.length-1]>lh*0.5){
+                if(pages[pages.length-1]<maxY && maxY-pages[pages.length-1]>10){
                   pages.push(maxY);
                 }
                 window.__lisbPages=pages;
