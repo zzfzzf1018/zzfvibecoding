@@ -16,6 +16,38 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
 
+    <!-- Always-visible header indicator: chapter title + page within chapter -->
+    <TextView
+        android:id="@+id/headerIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textColor="#99000000"
+        android:textSize="12sp"/>
+
+    <!-- Always-visible footer indicator: book progress % + page within chapter -->
+    <TextView
+        android:id="@+id/footerIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textColor="#99000000"
+        android:textSize="12sp"/>
+
     <!-- Top menu -->
     <LinearLayout
         android:id="@+id/topBar"

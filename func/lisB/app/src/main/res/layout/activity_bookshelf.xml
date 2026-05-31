@@ -3,18 +3,50 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/shelf_bg"
+    android:fitsSystemWindows="true">
 
     <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp">
+
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/action_bar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-            app:titleTextColor="@android:color/white"/>
+            android:layout_height="0dp"
+            android:visibility="gone"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="28dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.04"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/app_subtitle"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="13sp"
+                android:letterSpacing="0.08"/>
+        </LinearLayout>
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -22,27 +54,47 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingTop="64dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
         android:paddingBottom="96dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"/>
 
-    <TextView
+    <LinearLayout
         android:id="@+id/emptyHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="书架空空如也\n点击右下角 + 导入 EPUB"
-        android:textAlignment="center"
-        android:textColor="#888"
-        android:textSize="16sp"/>
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="\ud83d\udcd6"
+            android:textSize="56sp"
+            android:alpha="0.35"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/empty_hint"
+            android:textAlignment="center"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="15sp"
+            android:lineSpacingExtra="4dp"/>
+    </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabImport"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="20dp"
+        android:layout_margin="24dp"
         android:contentDescription="导入"
-        android:src="@android:drawable/ic_input_add"/>
+        android:src="@android:drawable/ic_input_add"
+        app:tint="@android:color/white"
+        app:backgroundTint="@color/primary"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

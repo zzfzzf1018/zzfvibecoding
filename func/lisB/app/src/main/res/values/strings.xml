@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">LisB 阅读器</string>
+    <string name="app_name">林中路阅读器</string>
+    <string name="app_subtitle">Holzwege · 林中路</string>
+    <string name="empty_hint">书架空空如也\n点击右下角 + 导入 EPUB</string>
+    <string name="import_unsupported">不支持的文件格式，请选择有效的 .epub 文件</string>
+    <string name="import_empty">该 EPUB 没有可读章节，已忽略</string>
 </resources>

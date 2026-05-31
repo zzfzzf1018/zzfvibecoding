@@ -1,5 +1,10 @@
 <resources>
-    <color name="primary">#3F51B5</color>
-    <color name="primaryDark">#303F9F</color>
-    <color name="accent">#FF4081</color>
+    <color name="primary">#5B6F8A</color>           <!-- 深林石青 -->
+    <color name="primaryDark">#3F5168</color>
+    <color name="accent">#C29A56</color>             <!-- 林中暖光 -->
+    <color name="shelf_bg">#F5F1EA</color>            <!-- 米白纸 -->
+    <color name="shelf_bg_dark">#181613</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="card_bg_dark">#23211C</color>
+    <color name="indicator_bg">#80222222</color>
 </resources>

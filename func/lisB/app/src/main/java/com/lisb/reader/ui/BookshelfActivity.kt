@@ -37,7 +37,8 @@ class BookshelfActivity : AppCompatActivity() {
         setContentView(R.layout.activity_bookshelf)
         settings = SettingsManager.get(this)
 
-        setSupportActionBar(findViewById(R.id.action_bar))
+        // Toolbar is kept in layout for compatibility but hidden; the new header
+        // is a styled TextView block. Window title still uses app_name.
         title = getString(R.string.app_name)
 
         val rv = findViewById<RecyclerView>(R.id.shelfList)
@@ -69,21 +70,52 @@ class BookshelfActivity : AppCompatActivity() {
     }
 
     private fun importEpub(uri: Uri) {
-        // Persist read permission so we can re-open if needed (not strictly required since we copy)
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Throwable) {}
+        // Cheap format gate before we even hit the EPUB parser.
+        if (!looksLikeEpub(uri)) {
+            Toast.makeText(this, R.string.import_unsupported, Toast.LENGTH_LONG).show()
+            return
+        }
         lifecycleScope.launch {
             val book = try {
                 withContext(Dispatchers.IO) { EpubBook.importAndOpen(this@BookshelfActivity, uri) }
             } catch (t: Throwable) {
-                Toast.makeText(this@BookshelfActivity, "导入失败：${t.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@BookshelfActivity, getString(R.string.import_unsupported), Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            if (book.chapters.isEmpty()) {
+                // Cached file from importAndOpen is unusable: clean it up so it
+                // doesn't show up later if the user reopens the same Uri.
+                File(filesDir, "books/${book.id}.epub").delete()
+                Toast.makeText(this@BookshelfActivity, R.string.import_empty, Toast.LENGTH_LONG).show()
                 return@launch
             }
             settings.addToShelf(SettingsManager.ShelfEntry(book.id, book.title, book.author, System.currentTimeMillis()))
             refreshShelf(findViewById(R.id.emptyHint), findViewById(R.id.shelfList))
             openBook(book.id)
         }
+    }
+
+    /**
+     * Returns true only if the picked URI looks like an EPUB: name ends with
+     * .epub OR the resolver reports the official MIME. Cheap and avoids the
+     * cost / noise of running the parser on, say, a JPG the user picked by
+     * mistake.
+     */
+    private fun looksLikeEpub(uri: Uri): Boolean {
+        val mime = contentResolver.getType(uri)?.lowercase()
+        if (mime == "application/epub+zip") return true
+        val name = queryDisplayName(uri)?.lowercase().orEmpty()
+        return name.endsWith(".epub")
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        } catch (_: Throwable) { null }
     }
 
     private fun openBook(id: String) {
@@ -117,6 +149,7 @@ class BookshelfActivity : AppCompatActivity() {
         class VH(v: View) : RecyclerView.ViewHolder(v) {
             val title: TextView = v.findViewById(R.id.itemTitle)
             val author: TextView = v.findViewById(R.id.itemAuthor)
+            val badge: TextView = v.findViewById(R.id.itemBadge)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -128,6 +161,7 @@ class BookshelfActivity : AppCompatActivity() {
             val e = items[position]
             holder.title.text = e.title
             holder.author.text = e.author
+            holder.badge.text = e.title.firstOrNull()?.toString()?.uppercase() ?: "?"
             holder.itemView.setOnClickListener { onClick(e) }
             holder.itemView.setOnLongClickListener { onLongClick(e); true }
         }

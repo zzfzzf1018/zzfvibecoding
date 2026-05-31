@@ -47,6 +47,11 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getFloat(KEY_LINE_HEIGHT, 1.7f)
         set(value) = prefs.edit { putFloat(KEY_LINE_HEIGHT, value) }
 
+    /** Letter spacing in em (0.00..0.30). Only applied in clean (non-preserve) layout. */
+    var letterSpacing: Float
+        get() = prefs.getFloat(KEY_LETTER_SPACING, 0.02f).coerceIn(0f, 0.3f)
+        set(value) = prefs.edit { putFloat(KEY_LETTER_SPACING, value.coerceIn(0f, 0.3f)) }
+
     /** Brightness override (0..1), -1 = system default. */
     var brightness: Float
         get() = prefs.getFloat(KEY_BRIGHTNESS, -1f)
@@ -159,6 +164,7 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         private const val KEY_FONT = "font"
         private const val KEY_FONT_SIZE = "font_size"
         private const val KEY_LINE_HEIGHT = "line_height"
+        private const val KEY_LETTER_SPACING = "letter_spacing"
         private const val KEY_BRIGHTNESS = "brightness"
         private const val KEY_TTS_RATE = "tts_rate"
         private const val KEY_SHELF = "shelf"

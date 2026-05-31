@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    One-click LisB Android Release APK builder.
+    One-click Holzwege (林中路阅读器) Android Release APK builder.
 
 .DESCRIPTION
     Steps:
@@ -9,7 +9,7 @@
       3. If keystore.properties is missing, generate a local signing
          keystore (under build/keystores/) via keytool.
       4. Run .\gradlew.bat assembleRelease.
-      5. Copy the APK to dist\LisB-<version>-release-<stamp>.apk.
+      5. Copy the APK to dist\Holzwege-<version>-release-<stamp>.apk.
 
 .PARAMETER Clean
     Run 'gradlew clean' before building.
@@ -244,7 +244,7 @@ $gradleFile = Join-Path $PSScriptRoot 'app\build.gradle.kts'
 $verMatch = Select-String -Path $gradleFile -Pattern 'versionName\s*=\s*"([^"]+)"' | Select-Object -First 1
 $version = if ($verMatch) { $verMatch.Matches[0].Groups[1].Value } else { 'unknown' }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
-$dest = Join-Path $distDir ("LisB-{0}-release-{1}.apk" -f $version, $stamp)
+$dest = Join-Path $distDir ("Holzwege-{0}-release-{1}.apk" -f $version, $stamp)
 Copy-Item -Path $apk.FullName -Destination $dest -Force
 
 Write-Host ""
