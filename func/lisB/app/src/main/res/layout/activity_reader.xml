@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Layout strategy:
+    The WebView is wrapped in a vertical LinearLayout sandwich between the
+    header and footer indicators. This guarantees the WebView's drawable
+    area NEVER overlaps the indicator bars (setPadding on WebView is known
+    to be unreliable for pushing rendered HTML content). The TouchOverlay
+    plus the menu bars float on top of the sandwich inside the parent
+    FrameLayout so tap zones and toggleable menus still cover the whole
+    screen.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/readerRoot"
     android:layout_width="match_parent"
@@ -6,47 +16,53 @@
     android:fitsSystemWindows="true"
     android:background="#FFFFFF">
 
-    <WebView
-        android:id="@+id/webview"
+    <LinearLayout
+        android:id="@+id/readerColumn"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/headerIndicator"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textColor="#99000000"
+            android:textSize="12sp"
+            android:includeFontPadding="false"/>
+
+        <WebView
+            android:id="@+id/webview"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
+
+        <TextView
+            android:id="@+id/footerIndicator"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textColor="#99000000"
+            android:textSize="12sp"
+            android:includeFontPadding="false"/>
+    </LinearLayout>
 
     <com.lisb.reader.ui.TouchOverlay
         android:id="@+id/touchOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
-
-    <!-- Always-visible header indicator: chapter title + page within chapter -->
-    <TextView
-        android:id="@+id/headerIndicator"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:gravity="center_vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:singleLine="true"
-        android:ellipsize="end"
-        android:textColor="#99000000"
-        android:textSize="12sp"/>
-
-    <!-- Always-visible footer indicator: book progress % + page within chapter -->
-    <TextView
-        android:id="@+id/footerIndicator"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:gravity="center_vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:singleLine="true"
-        android:ellipsize="end"
-        android:textColor="#99000000"
-        android:textSize="12sp"/>
 
     <!-- Top menu -->
     <LinearLayout

@@ -62,6 +62,11 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getFloat(KEY_TTS_RATE, 1.0f)
         set(value) = prefs.edit { putFloat(KEY_TTS_RATE, value) }
 
+    /** Reader menu bar background alpha (0.3..1.0). Text/icons remain opaque. */
+    var menuBarAlpha: Float
+        get() = prefs.getFloat(KEY_MENU_ALPHA, 0.9f).coerceIn(0.3f, 1f)
+        set(value) = prefs.edit { putFloat(KEY_MENU_ALPHA, value.coerceIn(0.3f, 1f)) }
+
     /**
      * When true, the EPUB's own <head>/<style>/inline CSS are kept and only
      * theme colors (+ optionally font size) are overlaid on top. When false,
@@ -167,6 +172,7 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         private const val KEY_LETTER_SPACING = "letter_spacing"
         private const val KEY_BRIGHTNESS = "brightness"
         private const val KEY_TTS_RATE = "tts_rate"
+        private const val KEY_MENU_ALPHA = "menu_alpha"
         private const val KEY_SHELF = "shelf"
         private const val KEY_PRESERVE_STYLE = "preserve_epub_style"
 

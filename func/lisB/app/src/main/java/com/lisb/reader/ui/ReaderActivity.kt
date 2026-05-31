@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -56,10 +57,13 @@ class ReaderActivity : AppCompatActivity() {
     private var pendingScrollY: Int = 0
     private var menuVisible = false
 
-    /** Heights reserved for the always-visible indicators (above + below text). */
-    private val indicatorHeightDp = 22
-    /** Extra margin between text and indicator so glyphs never touch the bar. */
-    private val textMarginDp = 6
+    /** When true, the WebView shows a plain-text "TTS mode" rendering where
+     *  each TTS chunk is wrapped in a span so we can highlight it and snap
+     *  pages to it. Set true on first startSpeakingHere, cleared on doStop. */
+    private var isTtsActive: Boolean = false
+    /** If non-null, after the next onPageFinished the service is told to
+     *  start speaking this chunk index for the current chapter. */
+    private var pendingTtsStartChunk: Int? = null
 
     // ---- TTS service ----
     private var ttsService: TtsService? = null
@@ -73,6 +77,9 @@ class ReaderActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (idx != currentChapter) loadChapter(idx, scrollY = 0, skipTtsRestart = true)
                 }
+            }
+            ttsService?.onChunkStartExternal = { idx ->
+                runOnUiThread { onTtsChunkStarted(idx) }
             }
             pushChaptersToServiceIfReady()
         }
@@ -103,6 +110,7 @@ class ReaderActivity : AppCompatActivity() {
         setupMenuButtons()
         applyBrightness()
         applyReaderThemeColors()
+        applyMenuBarAlpha()
 
         val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
         if (bookId.isNullOrEmpty()) { finish(); return }
@@ -113,14 +121,18 @@ class ReaderActivity : AppCompatActivity() {
         bindService(Intent(this, TtsService::class.java), ttsConn, Context.BIND_AUTO_CREATE)
     }
 
-    /** Pad WebView and indicator bars for system bars + reserved indicator strips. */
+    /**
+     * Apply system bar insets to the header (top) and footer (bottom) bars.
+     * The WebView is sandwiched between them inside a vertical LinearLayout,
+     * so it never needs its own padding to avoid the system bars or the
+     * indicator strips. (Setting padding on a WebView does NOT reliably push
+     * rendered HTML content inward — content draws from y=0 of the view's
+     * bounds regardless, which used to cause the header / footer to overlap
+     * the text on first/last pages.)
+     */
     private fun applySystemInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val sb = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val ind = dp(indicatorHeightDp)
-            val gap = dp(textMarginDp)
-            // WebView reserves: system bars + indicator strip + small gap on both ends
-            webView.setPadding(0, sb.top + ind + gap, 0, sb.bottom + ind + gap)
             headerIndicator.setPadding(
                 headerIndicator.paddingLeft, sb.top + dp(4),
                 headerIndicator.paddingRight, dp(4)
@@ -135,7 +147,10 @@ class ReaderActivity : AppCompatActivity() {
         }
     }
 
-    /** Choose indicator text color based on theme to stay legible. */
+    /** Choose indicator text + background colors based on theme to stay legible.
+     *  Background is opaque so the indicator strip cleanly separates from the
+     *  WebView region (they no longer overlap, but a solid bg also avoids any
+     *  visual fight with text that's about to scroll under it). */
     private fun applyReaderThemeColors() {
         val onLight = when (settings.theme) {
             SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA -> true
@@ -148,6 +163,8 @@ class ReaderActivity : AppCompatActivity() {
             SettingsManager.Theme.BLACK -> Color.BLACK
         }
         rootView.setBackgroundColor(bg)
+        headerIndicator.setBackgroundColor(bg)
+        footerIndicator.setBackgroundColor(bg)
         val ind = if (onLight) Color.parseColor("#88000000") else Color.parseColor("#AAFFFFFF")
         headerIndicator.setTextColor(ind)
         footerIndicator.setTextColor(ind)
@@ -156,7 +173,10 @@ class ReaderActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         webView.settings.apply {
-            javaScriptEnabled = false
+            // JS is required for TTS-mode highlight + auto page snap. We only
+            // load locally-built HTML (loadDataWithBaseURL with null base) so
+            // there is no untrusted script surface.
+            javaScriptEnabled = true
             useWideViewPort = false
             loadWithOverviewMode = false
             defaultTextEncodingName = "UTF-8"
@@ -170,14 +190,29 @@ class ReaderActivity : AppCompatActivity() {
                     view?.postDelayed({
                         view.scrollTo(0, pendingScrollY); pendingScrollY = 0
                         updateIndicators()
+                        firePendingTtsStartIfAny()
                     }, 80)
                 } else {
-                    view?.postDelayed({ updateIndicators() }, 60)
+                    view?.postDelayed({
+                        updateIndicators()
+                        firePendingTtsStartIfAny()
+                    }, 60)
                 }
                 updateProgressText()
             }
         }
         webView.viewTreeObserver.addOnScrollChangedListener { updateIndicators() }
+    }
+
+    /** Called after a TTS-mode chapter finishes loading; if a chunk was
+     *  queued (e.g. user just hit "start TTS here"), tell the service now. */
+    private fun firePendingTtsStartIfAny() {
+        val idx = pendingTtsStartChunk ?: return
+        pendingTtsStartChunk = null
+        val svc = ttsService ?: return
+        ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
+        svc.setRate(settings.ttsRate)
+        svc.startSpeaking(currentChapter, idx)
     }
 
     private fun setupTouchZones() {
@@ -251,7 +286,8 @@ class ReaderActivity : AppCompatActivity() {
         currentChapter = index.coerceIn(0, b.chapters.lastIndex)
         pendingScrollY = scrollY
         seekChapter.progress = currentChapter
-        val html = buildHtml(b.chapters[currentChapter])
+        val chapter = b.chapters[currentChapter]
+        val html = if (isTtsActive) buildTtsHtml(chapter) else buildHtml(chapter)
         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         saveProgress()
     }
@@ -304,12 +340,104 @@ class ReaderActivity : AppCompatActivity() {
         }
     }
 
+    /** Build a stripped-down, plain-text rendering of the chapter where each
+     *  TTS chunk is wrapped in a span so we can highlight + auto-scroll to
+     *  it. EPUB-original styling is intentionally dropped here — we trade it
+     *  for reliable mapping between TTS sentences and on-screen positions. */
+    private fun buildTtsHtml(chapter: com.lisb.reader.epub.EpubBook.Chapter): String {
+        val theme = settings.theme
+        val font = settings.fontFamily
+        val size = settings.fontSizePx
+        val lh = settings.lineHeight
+        val ls = settings.letterSpacing
+
+        val chunks = TtsManager.splitForTts(chapter.plainText)
+        val body = StringBuilder()
+        body.append("<div class=\"tts-flow\">")
+        chunks.forEachIndexed { i, c ->
+            body.append("<span id=\"tts-").append(i).append("\" class=\"tts-chunk\">")
+            body.append(htmlEscape(c).replace("\n", "<br>"))
+            body.append("</span>")
+            body.append(" ")
+        }
+        body.append("</div>")
+
+        val lineHeightCssPx = (size * lh).toInt()
+        val highlightCss = when (theme) {
+            SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA ->
+                "background-color:rgba(255,213,79,0.55);color:#1A1A1A;"
+            SettingsManager.Theme.DARK, SettingsManager.Theme.BLACK ->
+                "background-color:rgba(255,213,79,0.35);color:#FFFFFF;"
+        }
+
+        return """
+            <!DOCTYPE html>
+            <html><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+            <style>
+              html,body{margin:0;padding:0;${theme.css}}
+              body{font-family:${font.css};font-size:${size}px;line-height:$lh;
+                   letter-spacing:${"%.3f".format(ls)}em;
+                   padding:12px 20px 24px 20px;text-align:justify;word-wrap:break-word;}
+              .tts-chunk{transition:background-color .15s;border-radius:3px;padding:0 1px;}
+              .tts-active{$highlightCss}
+              img{max-width:100%;height:auto;}
+            </style>
+            <script>
+              window.__lisbCur=null;
+              window.__lisbLineHeight=$lineHeightCssPx;
+              function lisbHighlight(i){
+                if(window.__lisbCur!=null){var p=document.getElementById('tts-'+window.__lisbCur);if(p)p.classList.remove('tts-active');}
+                window.__lisbCur=i;
+                var el=document.getElementById('tts-'+i);
+                if(!el)return;
+                el.classList.add('tts-active');
+                var r=el.getBoundingClientRect();
+                if(r.top<0||r.bottom>window.innerHeight){
+                  var t=window.scrollY+r.top;
+                  var lh=window.__lisbLineHeight||30;
+                  t=Math.floor(t/lh)*lh;
+                  if(t<0)t=0;
+                  window.scrollTo(0,t);
+                }
+              }
+              function lisbFirstChunkAt(y){
+                var spans=document.getElementsByClassName('tts-chunk');
+                for(var i=0;i<spans.length;i++){
+                  var s=spans[i];
+                  if(s.offsetTop+s.offsetHeight>y+2)return i;
+                }
+                return spans.length>0?spans.length-1:0;
+              }
+            </script>
+            </head>
+            <body>${body}</body></html>
+        """.trimIndent()
+    }
+
+    private fun htmlEscape(s: String): String =
+        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
     // ---- Pagination helpers ----
 
+    /** Page step equals the WebView's full visible height — SNAPPED DOWN to a
+     *  multiple of the CSS line-height. Without snapping, a page boundary
+     *  inevitably falls mid-line, so the previous page's last line is half-
+     *  cut at the bottom and the next page's first line is half-cut at the
+     *  top. Snapping turns that cut into a tiny blank strip at the page
+     *  bottom instead, which is the standard reader behaviour. */
     private fun pageStepPx(): Int {
-        // Each "page" is exactly the WebView's visible inner height (it
-        // already has system-bar + indicator-strip padding subtracted).
-        return max(1, webView.height - webView.paddingTop - webView.paddingBottom)
+        val h = webView.height
+        if (h <= 0) return 1
+        val lh = lineHeightDevicePx()
+        if (lh <= 0) return h
+        return max(lh, (h / lh) * lh)
+    }
+
+    /** Approximate CSS line-height in device pixels, derived from settings. */
+    private fun lineHeightDevicePx(): Int {
+        val density = resources.displayMetrics.density
+        return max(1, (settings.fontSizePx * settings.lineHeight * density).toInt())
     }
 
     private fun totalPagesInChapter(): Int {
@@ -324,17 +452,19 @@ class ReaderActivity : AppCompatActivity() {
         val view = webView
         val step = pageStepPx()
         val totalContent = (view.contentHeight * resources.displayMetrics.density).toInt()
-        val maxY = (totalContent - view.height + view.paddingBottom).coerceAtLeast(0)
+        val maxY = (totalContent - view.height).coerceAtLeast(0)
         if (view.scrollY >= maxY - 4) {
             val b = book ?: return
             if (currentChapter < b.chapters.lastIndex) {
                 loadChapter(currentChapter + 1, scrollY = 0)
+                if (isTtsActive) pendingTtsStartChunk = 0
             } else {
                 Toast.makeText(this, "已是最后一页", Toast.LENGTH_SHORT).show()
             }
         } else {
             view.scrollTo(0, (view.scrollY + step).coerceAtMost(maxY))
             saveProgress(); updateProgressText(); updateIndicators()
+            syncTtsToCurrentPage()
         }
     }
 
@@ -344,12 +474,29 @@ class ReaderActivity : AppCompatActivity() {
         if (view.scrollY <= 4) {
             if (currentChapter > 0) {
                 loadChapter(currentChapter - 1, scrollY = Int.MAX_VALUE / 2)
+                if (isTtsActive) pendingTtsStartChunk = 0
             } else {
                 Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
             }
         } else {
             view.scrollTo(0, (view.scrollY - step).coerceAtLeast(0))
             saveProgress(); updateProgressText(); updateIndicators()
+            syncTtsToCurrentPage()
+        }
+    }
+
+    /** When the user manually pages while TTS is playing, jump the TTS
+     *  pointer to the first sentence visible on the new page so the voice
+     *  follows the eye. */
+    private fun syncTtsToCurrentPage() {
+        val svc = ttsService ?: return
+        if (!isTtsActive) return
+        // Query JS for the chunk index whose bottom is below the viewport
+        // top, then restart speaking from there.
+        val cssScrollY = (webView.scrollY / resources.displayMetrics.density).toInt()
+        webView.evaluateJavascript("lisbFirstChunkAt($cssScrollY)") { raw ->
+            val v = raw?.trim('"')?.toIntOrNull() ?: return@evaluateJavascript
+            svc.startSpeaking(currentChapter, v)
         }
     }
 
@@ -504,10 +651,36 @@ class ReaderActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-        AlertDialog.Builder(this).setTitle("亮度").setView(view)
+
+        // Menu transparency slider (0.30 .. 1.00 in 0.05 steps -> 0..14)
+        val alphaSeek = view.findViewById<SeekBar>(R.id.menuAlphaSeek)
+        val alphaLabel = view.findViewById<TextView>(R.id.menuAlphaLabel)
+        alphaSeek.max = 14
+        alphaSeek.progress = ((settings.menuBarAlpha - 0.3f) / 0.05f).toInt().coerceIn(0, 14)
+        alphaLabel.text = "菜单透明度：${(settings.menuBarAlpha * 100).toInt()}%"
+        alphaSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                val v = (0.3f + p * 0.05f).coerceIn(0.3f, 1f)
+                settings.menuBarAlpha = v
+                alphaLabel.text = "菜单透明度：${(v * 100).toInt()}%"
+                applyMenuBarAlpha()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        AlertDialog.Builder(this).setTitle("亮度 / 菜单").setView(view)
             .setPositiveButton("确定", null)
-            .setNeutralButton("跟随系统") { _, _ -> settings.brightness = -1f; applyBrightness() }
+            .setNeutralButton("跳随系统亮度") { _, _ -> settings.brightness = -1f; applyBrightness() }
             .show()
+    }
+
+    /** Apply current menuBarAlpha to top/bottom menu backgrounds while
+     *  keeping their child text/icons fully opaque. */
+    private fun applyMenuBarAlpha() {
+        val a = (settings.menuBarAlpha * 255).toInt().coerceIn(0, 255)
+        topBar.background = ColorDrawable(Color.parseColor("#202020")).apply { alpha = a }
+        bottomBar.background = ColorDrawable(Color.parseColor("#202020")).apply { alpha = a }
     }
 
     private fun applyBrightness() {
@@ -528,6 +701,15 @@ class ReaderActivity : AppCompatActivity() {
         if (svc != null && svc.playing) {
             svc.doPause()
             Toast.makeText(this, "已暂停朗读", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isTtsActive && svc != null) {
+            // TTS is loaded but paused — give the user a clear next step.
+            AlertDialog.Builder(this).setTitle("朗读已暂停")
+                .setPositiveButton("继续") { _, _ -> svc.doResume() }
+                .setNegativeButton("停止") { _, _ -> svc.doStop(); stopTtsModeAndRestore() }
+                .setNeutralButton("取消", null)
+                .show()
             return
         }
         ensureNotificationPermission()
@@ -591,10 +773,32 @@ class ReaderActivity : AppCompatActivity() {
             return
         }
         pushChaptersToServiceIfReady()
+        val wasActive = isTtsActive
+        isTtsActive = true
+        if (chapterIdx != currentChapter) {
+            // Loading a new chapter will rebuild it in TTS mode; defer the
+            // actual start until onPageFinished fires.
+            pendingTtsStartChunk = startChunk
+            loadChapter(chapterIdx, scrollY = 0, skipTtsRestart = true)
+            return
+        }
+        if (!wasActive) {
+            // First-time switch into TTS mode: reload the current chapter
+            // with chunk spans, then start speaking after onPageFinished.
+            pendingTtsStartChunk = startChunk
+            loadChapter(currentChapter, scrollY = webView.scrollY, skipTtsRestart = true)
+            return
+        }
         ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
         svc.setRate(settings.ttsRate)
-        svc.startSpeaking(chapterIdx, startChunk)
+        svc.startSpeaking(currentChapter, startChunk)
         Toast.makeText(this, "开始朗读", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Service → Activity hook: a new chunk just started being spoken. */
+    private fun onTtsChunkStarted(idx: Int) {
+        if (!isTtsActive) return
+        webView.evaluateJavascript("if(typeof lisbHighlight==='function')lisbHighlight($idx);", null)
     }
 
     private fun onChapterTtsFinished() {
@@ -605,7 +809,15 @@ class ReaderActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "朗读完毕", Toast.LENGTH_SHORT).show()
             ttsService?.doStop()
+            stopTtsModeAndRestore()
         }
+    }
+
+    /** Leave TTS mode and re-render the current chapter with normal styling. */
+    private fun stopTtsModeAndRestore() {
+        if (!isTtsActive) return
+        isTtsActive = false
+        loadChapter(currentChapter, scrollY = webView.scrollY, skipTtsRestart = true)
     }
 
     private fun ensureNotificationPermission() {
