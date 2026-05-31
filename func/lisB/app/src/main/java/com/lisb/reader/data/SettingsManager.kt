@@ -85,6 +85,37 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         )
     }
 
+    // ---- TTS progress (per book) ----
+
+    data class TtsProgress(val chapter: Int, val chunkIndex: Int, val updatedAt: Long)
+
+    fun saveTtsProgress(bookId: String, chapter: Int, chunkIndex: Int) {
+        prefs.edit {
+            putInt(ttsKey(bookId, "ch"), chapter)
+            putInt(ttsKey(bookId, "ck"), chunkIndex)
+            putLong(ttsKey(bookId, "t"), System.currentTimeMillis())
+        }
+    }
+
+    fun loadTtsProgress(bookId: String): TtsProgress? {
+        if (!prefs.contains(ttsKey(bookId, "ch"))) return null
+        return TtsProgress(
+            prefs.getInt(ttsKey(bookId, "ch"), 0),
+            prefs.getInt(ttsKey(bookId, "ck"), 0),
+            prefs.getLong(ttsKey(bookId, "t"), 0L)
+        )
+    }
+
+    fun clearTtsProgress(bookId: String) {
+        prefs.edit {
+            remove(ttsKey(bookId, "ch"))
+            remove(ttsKey(bookId, "ck"))
+            remove(ttsKey(bookId, "t"))
+        }
+    }
+
+    private fun ttsKey(bookId: String, k: String) = "tts_${bookId}_$k"
+
     // ---- Bookshelf (list of imported books) ----
 
     data class ShelfEntry(val id: String, val title: String, val author: String, val addedAt: Long)

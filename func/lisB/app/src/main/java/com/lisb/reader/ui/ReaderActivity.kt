@@ -1,8 +1,16 @@
 package com.lisb.reader.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -13,19 +21,25 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.lisb.reader.R
 import com.lisb.reader.data.SettingsManager
 import com.lisb.reader.epub.EpubBook
 import com.lisb.reader.tts.TtsManager
+import com.lisb.reader.tts.TtsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.max
 
 class ReaderActivity : AppCompatActivity() {
 
     private lateinit var settings: SettingsManager
+    private lateinit var rootView: View
     private lateinit var webView: WebView
     private lateinit var topBar: View
     private lateinit var bottomBar: View
@@ -39,14 +53,28 @@ class ReaderActivity : AppCompatActivity() {
     private var pendingScrollY: Int = 0
     private var menuVisible = false
 
-    private var tts: TtsManager? = null
-    private var ttsActive = false
+    // ---- TTS service binding ----
+    private var ttsService: TtsService? = null
+    private var ttsBound = false
+    private val ttsConn = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, b: IBinder?) {
+            ttsService = (b as TtsService.LocalBinder).service
+            ttsBound = true
+            ttsService?.onAllFinishedExternal = {
+                runOnUiThread { onChapterTtsFinished() }
+            }
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            ttsService = null; ttsBound = false
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_reader)
         settings = SettingsManager.get(this)
 
+        rootView = findViewById(R.id.readerRoot)
         webView = findViewById(R.id.webview)
         topBar = findViewById(R.id.topBar)
         bottomBar = findViewById(R.id.bottomBar)
@@ -55,6 +83,7 @@ class ReaderActivity : AppCompatActivity() {
         seekChapter = findViewById(R.id.seekChapter)
         touchOverlay = findViewById(R.id.touchOverlay)
 
+        applySystemInsets()
         setupWebView()
         setupTouchZones()
         setupMenuButtons()
@@ -65,6 +94,23 @@ class ReaderActivity : AppCompatActivity() {
         loadBook(bookId)
 
         hideMenu(animate = false)
+
+        // Bind to TTS service for cross-lifecycle control. Service is started
+        // (becomes foreground) lazily when the user actually starts reading.
+        bindService(Intent(this, TtsService::class.java), ttsConn, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun applySystemInsets() {
+        // Apply status-bar top inset to the top menu and nav-bar bottom inset
+        // to the bottom menu + WebView padding so text never disappears behind
+        // the system bars on edge-to-edge devices (Android 15+).
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
+            val sb = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            topBar.setPadding(topBar.paddingLeft, sb.top + dp(12), topBar.paddingRight, topBar.paddingBottom)
+            bottomBar.setPadding(bottomBar.paddingLeft, bottomBar.paddingTop, bottomBar.paddingRight, sb.bottom + dp(12))
+            webView.setPadding(0, 0, 0, sb.bottom)
+            insets
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -91,12 +137,14 @@ class ReaderActivity : AppCompatActivity() {
     private fun setupTouchZones() {
         touchOverlay.onTap = { x, y, w, h ->
             when {
-                y < h * 0.20f -> toggleMenu()           // top → menu
-                x < w * 0.33f -> goPreviousPage()      // left → prev
-                x > w * 0.67f -> goNextPage()          // right → next
-                else -> toggleMenu()                    // center → menu
+                y < h * 0.20f -> toggleMenu()
+                x < w * 0.33f -> goPreviousPage()
+                x > w * 0.67f -> goNextPage()
+                else -> toggleMenu()
             }
         }
+        touchOverlay.onSwipeLeft = { goNextPage() }      // swipe RTL -> next
+        touchOverlay.onSwipeRight = { goPreviousPage() } // swipe LTR -> prev
     }
 
     private fun setupMenuButtons() {
@@ -148,7 +196,6 @@ class ReaderActivity : AppCompatActivity() {
         val html = buildHtml(b.chapters[currentChapter])
         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         saveProgress()
-        if (ttsActive) startTtsForCurrentChapter()
     }
 
     private fun buildHtml(chapter: com.lisb.reader.epub.EpubBook.Chapter): String {
@@ -157,14 +204,13 @@ class ReaderActivity : AppCompatActivity() {
         val size = settings.fontSizePx
         val lh = settings.lineHeight
 
+        // Generous bottom padding so the last line of text never collides with
+        // the system nav bar or the bottom menu when shown.
         return if (settings.preserveEpubStyle) {
-            // Preserve EPUB's original head/style, overlay only a minimal theme
-            // layer at the END so it wins by source-order without overriding
-            // structural typography (margins / indents / fonts) from the book.
             val overlay = """
                 <style id="lisb-theme-overlay">
                   html,body{${theme.css}}
-                  body{padding:24px 20px 32px 20px;}
+                  body{padding:24px 20px 96px 20px;}
                   img{max-width:100%;height:auto;}
                 </style>
             """.trimIndent()
@@ -179,7 +225,6 @@ class ReaderActivity : AppCompatActivity() {
                 <body>${chapter.bodyHtml}</body></html>
             """.trimIndent()
         } else {
-            // Clean template: throw away the EPUB's styles and use ours.
             """
                 <!DOCTYPE html>
                 <html><head><meta charset="utf-8">
@@ -187,7 +232,7 @@ class ReaderActivity : AppCompatActivity() {
                 <style>
                   html,body{margin:0;padding:0;${theme.css}}
                   body{font-family:${font.css};font-size:${size}px;line-height:$lh;
-                       padding:24px 20px 32px 20px;text-align:justify;word-wrap:break-word;}
+                       padding:24px 20px 96px 20px;text-align:justify;word-wrap:break-word;}
                   p{margin:0 0 0.9em 0;text-indent:2em;}
                   h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;}
                   img{max-width:100%;height:auto;}
@@ -200,11 +245,10 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun goNextPage() {
         val view = webView
-        val pageH = view.height - dp(48)
+        val pageH = view.height - dp(24)
         val maxY = (view.contentHeight * resources.displayMetrics.density).toInt() - view.height
         val newY = view.scrollY + pageH
         if (view.scrollY >= maxY - 4) {
-            // End of chapter
             val b = book ?: return
             if (currentChapter < b.chapters.lastIndex) {
                 loadChapter(currentChapter + 1, scrollY = 0)
@@ -213,26 +257,22 @@ class ReaderActivity : AppCompatActivity() {
             }
         } else {
             view.scrollTo(0, newY.coerceAtMost(maxY))
-            saveProgress()
-            updateProgressText()
+            saveProgress(); updateProgressText()
         }
     }
 
     private fun goPreviousPage() {
         val view = webView
-        val pageH = view.height - dp(48)
+        val pageH = view.height - dp(24)
         if (view.scrollY <= 4) {
             if (currentChapter > 0) {
-                // Jump to previous chapter, last page
-                val prev = currentChapter - 1
-                loadChapter(prev, scrollY = Int.MAX_VALUE / 2)
+                loadChapter(currentChapter - 1, scrollY = Int.MAX_VALUE / 2)
             } else {
                 Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
             }
         } else {
             view.scrollTo(0, (view.scrollY - pageH).coerceAtLeast(0))
-            saveProgress()
-            updateProgressText()
+            saveProgress(); updateProgressText()
         }
     }
 
@@ -243,8 +283,7 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun updateProgressText() {
         val b = book ?: return
-        val total = b.chapters.size
-        progressText.text = "第 ${currentChapter + 1} / $total 章"
+        progressText.text = "第 ${currentChapter + 1} / ${b.chapters.size} 章"
     }
 
     // ---- Menu ----
@@ -253,8 +292,7 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun showMenu() {
         menuVisible = true
-        topBar.visibility = View.VISIBLE
-        bottomBar.visibility = View.VISIBLE
+        topBar.visibility = View.VISIBLE; bottomBar.visibility = View.VISIBLE
         topBar.alpha = 0f; bottomBar.alpha = 0f
         topBar.animate().alpha(1f).setDuration(150).start()
         bottomBar.animate().alpha(1f).setDuration(150).start()
@@ -276,7 +314,7 @@ class ReaderActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_font, null)
         val families = SettingsManager.FontFamily.values()
         val radioGroup = dialogView.findViewById<android.widget.RadioGroup>(R.id.fontGroup)
-        families.forEachIndexed { i, f ->
+        families.forEachIndexed { _, f ->
             val rb = android.widget.RadioButton(this).apply {
                 id = View.generateViewId(); text = f.label
                 isChecked = settings.fontFamily == f
@@ -286,7 +324,7 @@ class ReaderActivity : AppCompatActivity() {
         }
         val sizeSeek = dialogView.findViewById<SeekBar>(R.id.sizeSeek)
         val sizeLabel = dialogView.findViewById<TextView>(R.id.sizeLabel)
-        sizeSeek.max = 28 // 12..40
+        sizeSeek.max = 28
         sizeSeek.progress = settings.fontSizePx - 12
         sizeLabel.text = "字号：${settings.fontSizePx}"
         sizeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -310,9 +348,7 @@ class ReaderActivity : AppCompatActivity() {
         val labels = themes.map { it.label }.toTypedArray()
         val current = themes.indexOf(settings.theme)
         AlertDialog.Builder(this).setTitle("主题").setSingleChoiceItems(labels, current) { d, i ->
-            settings.theme = themes[i]
-            reloadCurrentChapter()
-            d.dismiss()
+            settings.theme = themes[i]; reloadCurrentChapter(); d.dismiss()
         }.setNegativeButton("取消", null).show()
     }
 
@@ -333,17 +369,15 @@ class ReaderActivity : AppCompatActivity() {
         seek.progress = if (current < 0) 50 else (current * 100).toInt()
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
-                settings.brightness = p / 100f
-                applyBrightness()
+                settings.brightness = p / 100f; applyBrightness()
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
         AlertDialog.Builder(this).setTitle("亮度").setView(view)
             .setPositiveButton("确定", null)
-            .setNeutralButton("跟随系统") { _, _ ->
-                settings.brightness = -1f; applyBrightness()
-            }.show()
+            .setNeutralButton("跟随系统") { _, _ -> settings.brightness = -1f; applyBrightness() }
+            .show()
     }
 
     private fun applyBrightness() {
@@ -357,19 +391,20 @@ class ReaderActivity : AppCompatActivity() {
         loadChapter(currentChapter, scrollY = webView.scrollY)
     }
 
-    // ---- TTS ----
+    // ==================== TTS ====================
 
     private fun toggleTts() {
-        if (ttsActive) {
-            ttsActive = false
-            tts?.stop()
-            Toast.makeText(this, "已停止朗读", Toast.LENGTH_SHORT).show()
+        val svc = ttsService
+        if (svc != null && svc.playing) {
+            svc.doPause()
+            Toast.makeText(this, "已暂停朗读", Toast.LENGTH_SHORT).show()
             return
         }
+        ensureNotificationPermission()
         val view = layoutInflater.inflate(R.layout.dialog_tts, null)
         val rateSeek = view.findViewById<SeekBar>(R.id.rateSeek)
         val rateLabel = view.findViewById<TextView>(R.id.rateLabel)
-        rateSeek.max = 30 // 0..3.0 in steps of 0.1
+        rateSeek.max = 30
         rateSeek.progress = ((settings.ttsRate) * 10).toInt().coerceIn(0, 30)
         rateLabel.text = "语速：${"%.1f".format(settings.ttsRate)}x"
         rateSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -377,49 +412,95 @@ class ReaderActivity : AppCompatActivity() {
                 val r = (p / 10f).coerceAtLeast(0.5f)
                 settings.ttsRate = r
                 rateLabel.text = "语速：${"%.1f".format(r)}x"
-                tts?.setRate(r)
+                ttsService?.setRate(r)
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
         AlertDialog.Builder(this).setTitle("AI 朗读").setView(view)
-            .setPositiveButton("开始朗读") { _, _ ->
-                ttsActive = true
-                ensureTtsReady { startTtsForCurrentChapter() }
-            }.setNegativeButton("取消", null).show()
+            .setPositiveButton("开始朗读") { _, _ -> promptStartPosition() }
+            .setNegativeButton("取消", null).show()
     }
 
-    private fun ensureTtsReady(then: () -> Unit) {
-        if (tts?.isReady == true) { then(); return }
-        if (tts == null) {
-            tts = TtsManager(this).apply {
-                setRate(settings.ttsRate)
-                onReady = { runOnUiThread(then) }
-                onAllFinished = { runOnUiThread { onChapterTtsFinished() } }
-            }
+    /**
+     * Decide where to begin reading: from the current visible page, or from
+     * the last saved position. If saved position differs meaningfully, ask.
+     */
+    private fun promptStartPosition() {
+        val b = book ?: return
+        val currentChunkIdx = currentPageChunkIndex(b.chapters[currentChapter].plainText)
+        val saved = settings.loadTtsProgress(b.id)
+        val savedDifferent = saved != null &&
+                (saved.chapter != currentChapter || kotlin.math.abs(saved.chunkIndex - currentChunkIdx) > 1)
+        if (savedDifferent && saved != null) {
+            AlertDialog.Builder(this).setTitle("继续上次朗读？")
+                .setMessage("上次朗读到第 ${saved.chapter + 1} 章 · 第 ${saved.chunkIndex + 1} 句")
+                .setPositiveButton("从上次位置") { _, _ ->
+                    if (saved.chapter != currentChapter) {
+                        loadChapter(saved.chapter, scrollY = 0)
+                        webView.postDelayed({ startSpeakingHere(saved.chunkIndex) }, 200)
+                    } else {
+                        startSpeakingHere(saved.chunkIndex)
+                    }
+                }
+                .setNegativeButton("从当前页") { _, _ -> startSpeakingHere(currentChunkIdx) }
+                .show()
         } else {
-            tts?.onReady = { runOnUiThread(then) }
+            startSpeakingHere(currentChunkIdx)
         }
     }
 
-    private fun startTtsForCurrentChapter() {
+    /** Approximate chunk index for the top of the current viewport. */
+    private fun currentPageChunkIndex(plainText: String): Int {
+        val chunks = TtsManager.splitForTts(plainText)
+        if (chunks.isEmpty()) return 0
+        val contentPx = (webView.contentHeight * resources.displayMetrics.density).toInt()
+        val visible = max(1, contentPx - webView.height)
+        val ratio = webView.scrollY.toFloat() / visible.toFloat()
+        return (chunks.size * ratio.coerceIn(0f, 1f)).toInt().coerceIn(0, chunks.lastIndex)
+    }
+
+    private fun startSpeakingHere(startChunk: Int) {
+        val svc = ttsService ?: run {
+            // Service not bound yet; defer briefly.
+            webView.postDelayed({ startSpeakingHere(startChunk) }, 200)
+            return
+        }
         val b = book ?: return
-        val text = b.chapters[currentChapter].plainText
-        tts?.speak(text, "ch_$currentChapter")
-        Toast.makeText(this, "开始朗读，结束后将自动翻章", Toast.LENGTH_SHORT).show()
+        val chapter = b.chapters[currentChapter]
+        // Bring service to foreground (covered by manifest mediaPlayback type).
+        ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
+        svc.setRate(settings.ttsRate)
+        svc.startSpeaking(
+            bookId = b.id,
+            bookTitle = b.title,
+            chapterTitle = chapter.title,
+            chapterIndex = currentChapter,
+            text = chapter.plainText,
+            startChunk = startChunk
+        )
+        Toast.makeText(this, "开始朗读，结束本章后自动翻章", Toast.LENGTH_SHORT).show()
     }
 
     private fun onChapterTtsFinished() {
-        if (!ttsActive) return
         val b = book ?: return
         if (currentChapter < b.chapters.lastIndex) {
             loadChapter(currentChapter + 1, scrollY = 0)
-            // loadChapter triggers startTtsForCurrentChapter while ttsActive
+            webView.postDelayed({ startSpeakingHere(0) }, 200)
         } else {
-            ttsActive = false
             Toast.makeText(this, "朗读完毕", Toast.LENGTH_SHORT).show()
+            ttsService?.doStop()
         }
     }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED) return
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
+    }
+
+    // ---- Misc ----
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -427,8 +508,14 @@ class ReaderActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         saveProgress()
-        tts?.shutdown()
+        if (ttsBound) { try { unbindService(ttsConn) } catch (_: Throwable) {}; ttsBound = false }
+        // Note: we deliberately do NOT stop the TtsService here. Closing the
+        // reader should not interrupt playback — the user controls it via the
+        // notification (Stop) or by reopening and tapping the TTS button.
     }
 
-    companion object { const val EXTRA_BOOK_ID = "book_id" }
+    companion object {
+        const val EXTRA_BOOK_ID = "book_id"
+        private const val REQ_NOTIF = 1101
+    }
 }
