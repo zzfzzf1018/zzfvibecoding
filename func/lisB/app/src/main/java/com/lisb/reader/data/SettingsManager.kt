@@ -12,6 +12,7 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
     enum class Theme(val css: String, val label: String) {
         LIGHT("background:#FFFFFF;color:#1A1A1A;", "白天"),
         SEPIA("background:#F4ECD8;color:#5B4636;", "护眼"),
+        GREEN("background:#E0EBD8;color:#23351E;", "护眼绿"),
         DARK("background:#121212;color:#D6D6D6;", "夜间"),
         BLACK("background:#000000;color:#9E9E9E;", "纯黑");
 
@@ -66,6 +67,11 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
     var menuBarAlpha: Float
         get() = prefs.getFloat(KEY_MENU_ALPHA, 0.9f).coerceIn(0.3f, 1f)
         set(value) = prefs.edit { putFloat(KEY_MENU_ALPHA, value.coerceIn(0.3f, 1f)) }
+
+    /** Optional override for body text color. Empty string = use theme default. */
+    var fontColor: String
+        get() = prefs.getString(KEY_FONT_COLOR, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_FONT_COLOR, value) }
 
     /**
      * When true, the EPUB's own <head>/<style>/inline CSS are kept and only
@@ -173,6 +179,7 @@ class SettingsManager private constructor(private val prefs: SharedPreferences) 
         private const val KEY_BRIGHTNESS = "brightness"
         private const val KEY_TTS_RATE = "tts_rate"
         private const val KEY_MENU_ALPHA = "menu_alpha"
+        private const val KEY_FONT_COLOR = "font_color"
         private const val KEY_SHELF = "shelf"
         private const val KEY_PRESERVE_STYLE = "preserve_epub_style"
 

@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lisb.reader.R
@@ -49,6 +50,7 @@ class BookshelfActivity : AppCompatActivity() {
         )
         rv.layoutManager = LinearLayoutManager(this)
         rv.adapter = adapter
+        attachSwipeToDelete(rv)
 
         findViewById<View>(R.id.fabImport).setOnClickListener {
             pickEpub.launch(arrayOf("application/epub+zip", "application/octet-stream", "*/*"))
@@ -135,6 +137,40 @@ class BookshelfActivity : AppCompatActivity() {
             }.show()
     }
 
+    /**
+     * Swipe right on a book row to surface a delete confirmation. We use a
+     * confirm dialog rather than instant-delete because the action is
+     * destructive and not easily undone (the cached EPUB is removed too).
+     */
+    private fun attachSwipeToDelete(rv: RecyclerView) {
+        val cb = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.RIGHT or ItemTouchHelper.LEFT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val pos = viewHolder.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return
+                val entry = adapter.getItem(pos) ?: run {
+                    adapter.notifyItemChanged(pos); return
+                }
+                AlertDialog.Builder(this@BookshelfActivity)
+                    .setTitle("删除《${entry.title}》？")
+                    .setMessage("将同时删除本地缓存与阅读进度。")
+                    .setOnCancelListener { adapter.notifyItemChanged(pos) }
+                    .setNegativeButton("取消") { _, _ -> adapter.notifyItemChanged(pos) }
+                    .setPositiveButton("删除") { _, _ ->
+                        settings.removeFromShelf(entry.id)
+                        File(filesDir, "books/${entry.id}.epub").delete()
+                        refreshShelf(findViewById(R.id.emptyHint), findViewById(R.id.shelfList))
+                    }.show()
+            }
+        }
+        ItemTouchHelper(cb).attachToRecyclerView(rv)
+    }
+
     private class ShelfAdapter(
         val onClick: (SettingsManager.ShelfEntry) -> Unit,
         val onLongClick: (SettingsManager.ShelfEntry) -> Unit
@@ -145,6 +181,9 @@ class BookshelfActivity : AppCompatActivity() {
         fun submit(list: List<SettingsManager.ShelfEntry>) {
             items.clear(); items.addAll(list); notifyDataSetChanged()
         }
+
+        fun getItem(position: Int): SettingsManager.ShelfEntry? =
+            items.getOrNull(position)
 
         class VH(v: View) : RecyclerView.ViewHolder(v) {
             val title: TextView = v.findViewById(R.id.itemTitle)

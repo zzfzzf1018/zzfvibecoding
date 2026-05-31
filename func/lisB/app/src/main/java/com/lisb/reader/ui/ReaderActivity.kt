@@ -12,6 +12,8 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -48,7 +50,6 @@ class ReaderActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var progressText: TextView
     private lateinit var seekChapter: SeekBar
-    private lateinit var touchOverlay: TouchOverlay
     private lateinit var headerIndicator: TextView
     private lateinit var footerIndicator: TextView
 
@@ -100,7 +101,6 @@ class ReaderActivity : AppCompatActivity() {
         titleText = findViewById(R.id.titleText)
         progressText = findViewById(R.id.progressText)
         seekChapter = findViewById(R.id.seekChapter)
-        touchOverlay = findViewById(R.id.touchOverlay)
         headerIndicator = findViewById(R.id.headerIndicator)
         footerIndicator = findViewById(R.id.footerIndicator)
 
@@ -147,18 +147,16 @@ class ReaderActivity : AppCompatActivity() {
         }
     }
 
-    /** Choose indicator text + background colors based on theme to stay legible.
-     *  Background is opaque so the indicator strip cleanly separates from the
-     *  WebView region (they no longer overlap, but a solid bg also avoids any
-     *  visual fight with text that's about to scroll under it). */
+    /** Choose indicator text + background colors based on theme to stay legible. */
     private fun applyReaderThemeColors() {
         val onLight = when (settings.theme) {
-            SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA -> true
+            SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA, SettingsManager.Theme.GREEN -> true
             SettingsManager.Theme.DARK, SettingsManager.Theme.BLACK -> false
         }
         val bg = when (settings.theme) {
             SettingsManager.Theme.LIGHT -> Color.parseColor("#FFFFFF")
             SettingsManager.Theme.SEPIA -> Color.parseColor("#F4ECD8")
+            SettingsManager.Theme.GREEN -> Color.parseColor("#E0EBD8")
             SettingsManager.Theme.DARK  -> Color.parseColor("#121212")
             SettingsManager.Theme.BLACK -> Color.BLACK
         }
@@ -215,17 +213,49 @@ class ReaderActivity : AppCompatActivity() {
         svc.startSpeaking(currentChapter, idx)
     }
 
+    /**
+     * Attach a gesture detector directly to the WebView for tap-zone
+     * navigation and horizontal swipes, while letting the WebView itself
+     * handle long-press → text selection → copy natively. We deliberately
+     * return false from setOnTouchListener so the WebView always sees the
+     * raw events too (single taps on text are no-ops in WebView, so there
+     * is no visible double-action).
+     */
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupTouchZones() {
-        touchOverlay.onTap = { x, y, w, h ->
-            when {
-                y < h * 0.20f -> toggleMenu()
-                x < w * 0.33f -> goPreviousPage()
-                x > w * 0.67f -> goNextPage()
-                else -> toggleMenu()
+        val density = resources.displayMetrics.density
+        val minSwipePx = 60f * density
+        val gd = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                val w = webView.width; val h = webView.height
+                if (w <= 0 || h <= 0) return false
+                val x = e.x; val y = e.y
+                when {
+                    y < h * 0.20f -> toggleMenu()
+                    x < w * 0.33f -> goPreviousPage()
+                    x > w * 0.67f -> goNextPage()
+                    else -> toggleMenu()
+                }
+                return true
             }
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float
+            ): Boolean {
+                e1 ?: return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                if (kotlin.math.abs(dx) >= minSwipePx &&
+                    kotlin.math.abs(dy) < kotlin.math.abs(dx) * 0.6f) {
+                    if (dx < 0) goNextPage() else goPreviousPage()
+                    return true
+                }
+                return false
+            }
+        })
+        webView.setOnTouchListener { _, ev ->
+            gd.onTouchEvent(ev)
+            false
         }
-        touchOverlay.onSwipeLeft = { goNextPage() }
-        touchOverlay.onSwipeRight = { goPreviousPage() }
     }
 
     private fun setupMenuButtons() {
@@ -298,15 +328,15 @@ class ReaderActivity : AppCompatActivity() {
         val size = settings.fontSizePx
         val lh = settings.lineHeight
         val ls = settings.letterSpacing
+        val fc = settings.fontColor
+        val fontColorRule = if (fc.isNotBlank()) "body,body *{color:$fc !important;}" else ""
 
-        // Smaller padding than before — we reserve space at the OUTSIDE of the
-        // WebView (paddingTop/Bottom on the View) so the indicator bars never
-        // overlap the text. Inside the HTML we just need comfortable margins.
         return if (settings.preserveEpubStyle) {
             val overlay = """
                 <style id="lisb-theme-overlay">
                   html,body{${theme.css}}
-                  body{padding:12px 20px 24px 20px;}
+                  body{padding:18px 20px 28px 20px;}
+                  $fontColorRule
                   img{max-width:100%;height:auto;}
                 </style>
             """.trimIndent()
@@ -317,10 +347,12 @@ class ReaderActivity : AppCompatActivity() {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
                 ${chapter.headHtml}
                 $overlay
+                $READER_JS
                 </head>
                 <body>${chapter.bodyHtml}</body></html>
             """.trimIndent()
         } else {
+            val colorCss = if (fc.isNotBlank()) "color:$fc;" else ""
             """
                 <!DOCTYPE html>
                 <html><head><meta charset="utf-8">
@@ -329,12 +361,14 @@ class ReaderActivity : AppCompatActivity() {
                   html,body{margin:0;padding:0;${theme.css}}
                   body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                        letter-spacing:${"%.3f".format(ls)}em;
-                       padding:12px 20px 24px 20px;text-align:justify;word-wrap:break-word;}
+                       padding:18px 20px 28px 20px;text-align:justify;word-wrap:break-word;$colorCss}
                   p{margin:0 0 0.9em 0;text-indent:2em;}
                   h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;letter-spacing:0;}
                   img{max-width:100%;height:auto;}
                   a{color:inherit;text-decoration:none;}
-                </style></head>
+                </style>
+                $READER_JS
+                </head>
                 <body>${chapter.bodyHtml}</body></html>
             """.trimIndent()
         }
@@ -350,6 +384,8 @@ class ReaderActivity : AppCompatActivity() {
         val size = settings.fontSizePx
         val lh = settings.lineHeight
         val ls = settings.letterSpacing
+        val fc = settings.fontColor
+        val colorCss = if (fc.isNotBlank()) "color:$fc;" else ""
 
         val chunks = TtsManager.splitForTts(chapter.plainText)
         val body = StringBuilder()
@@ -362,9 +398,8 @@ class ReaderActivity : AppCompatActivity() {
         }
         body.append("</div>")
 
-        val lineHeightCssPx = (size * lh).toInt()
         val highlightCss = when (theme) {
-            SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA ->
+            SettingsManager.Theme.LIGHT, SettingsManager.Theme.SEPIA, SettingsManager.Theme.GREEN ->
                 "background-color:rgba(255,213,79,0.55);color:#1A1A1A;"
             SettingsManager.Theme.DARK, SettingsManager.Theme.BLACK ->
                 "background-color:rgba(255,213,79,0.35);color:#FFFFFF;"
@@ -378,14 +413,14 @@ class ReaderActivity : AppCompatActivity() {
               html,body{margin:0;padding:0;${theme.css}}
               body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                    letter-spacing:${"%.3f".format(ls)}em;
-                   padding:12px 20px 24px 20px;text-align:justify;word-wrap:break-word;}
+                   padding:18px 20px 28px 20px;text-align:justify;word-wrap:break-word;$colorCss}
               .tts-chunk{transition:background-color .15s;border-radius:3px;padding:0 1px;}
               .tts-active{$highlightCss}
               img{max-width:100%;height:auto;}
             </style>
+            $READER_JS
             <script>
               window.__lisbCur=null;
-              window.__lisbLineHeight=$lineHeightCssPx;
               function lisbHighlight(i){
                 if(window.__lisbCur!=null){var p=document.getElementById('tts-'+window.__lisbCur);if(p)p.classList.remove('tts-active');}
                 window.__lisbCur=i;
@@ -394,9 +429,10 @@ class ReaderActivity : AppCompatActivity() {
                 el.classList.add('tts-active');
                 var r=el.getBoundingClientRect();
                 if(r.top<0||r.bottom>window.innerHeight){
+                  if(window.__lisbLh==null&&typeof lisbInit==='function')lisbInit();
+                  var step=(typeof lisbPageStep==='function')?lisbPageStep():window.innerHeight;
                   var t=window.scrollY+r.top;
-                  var lh=window.__lisbLineHeight||30;
-                  t=Math.floor(t/lh)*lh;
+                  t=Math.floor(t/step)*step;
                   if(t<0)t=0;
                   window.scrollTo(0,t);
                 }
@@ -449,39 +485,40 @@ class ReaderActivity : AppCompatActivity() {
         (webView.scrollY / pageStepPx()) + 1
 
     private fun goNextPage() {
-        val view = webView
-        val step = pageStepPx()
-        val totalContent = (view.contentHeight * resources.displayMetrics.density).toInt()
-        val maxY = (totalContent - view.height).coerceAtLeast(0)
-        if (view.scrollY >= maxY - 4) {
-            val b = book ?: return
-            if (currentChapter < b.chapters.lastIndex) {
-                loadChapter(currentChapter + 1, scrollY = 0)
-                if (isTtsActive) pendingTtsStartChunk = 0
+        // Delegate to JS which knows the exact CSS line-height, so every page
+        // boundary lands precisely between two lines of text (no half-glyphs
+        // peeking from the top or bottom).
+        webView.evaluateJavascript("lisbScrollByPage(1)") { raw ->
+            val v = raw?.trim('"') ?: return@evaluateJavascript
+            if (v == "NEXT_CHAPTER") {
+                val b = book ?: return@evaluateJavascript
+                if (currentChapter < b.chapters.lastIndex) {
+                    if (isTtsActive) pendingTtsStartChunk = 0
+                    loadChapter(currentChapter + 1, scrollY = 0)
+                } else {
+                    Toast.makeText(this, "已是最后一页", Toast.LENGTH_SHORT).show()
+                }
             } else {
-                Toast.makeText(this, "已是最后一页", Toast.LENGTH_SHORT).show()
+                saveProgress(); updateProgressText(); updateIndicators()
+                syncTtsToCurrentPage()
             }
-        } else {
-            view.scrollTo(0, (view.scrollY + step).coerceAtMost(maxY))
-            saveProgress(); updateProgressText(); updateIndicators()
-            syncTtsToCurrentPage()
         }
     }
 
     private fun goPreviousPage() {
-        val view = webView
-        val step = pageStepPx()
-        if (view.scrollY <= 4) {
-            if (currentChapter > 0) {
-                loadChapter(currentChapter - 1, scrollY = Int.MAX_VALUE / 2)
-                if (isTtsActive) pendingTtsStartChunk = 0
+        webView.evaluateJavascript("lisbScrollByPage(-1)") { raw ->
+            val v = raw?.trim('"') ?: return@evaluateJavascript
+            if (v == "PREV_CHAPTER") {
+                if (currentChapter > 0) {
+                    if (isTtsActive) pendingTtsStartChunk = 0
+                    loadChapter(currentChapter - 1, scrollY = Int.MAX_VALUE / 2)
+                } else {
+                    Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
+                }
             } else {
-                Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
+                saveProgress(); updateProgressText(); updateIndicators()
+                syncTtsToCurrentPage()
             }
-        } else {
-            view.scrollTo(0, (view.scrollY - step).coerceAtLeast(0))
-            saveProgress(); updateProgressText(); updateIndicators()
-            syncTtsToCurrentPage()
         }
     }
 
@@ -615,6 +652,46 @@ class ReaderActivity : AppCompatActivity() {
         val preserveBox = dialogView.findViewById<android.widget.CheckBox>(R.id.preserveStyle)
         preserveBox.isChecked = settings.preserveEpubStyle
         preserveBox.setOnCheckedChangeListener { _, checked -> settings.preserveEpubStyle = checked }
+
+        // Font color swatches: "默认" + a handful of presets. Selecting one
+        // updates the live preview by reloading the chapter on dialog dismiss.
+        val colorRow = dialogView.findViewById<android.widget.LinearLayout>(R.id.fontColorRow)
+        val colorOptions = listOf(
+            "" to "默认",
+            "#1A1A1A" to "黑",
+            "#3B2A1A" to "深棕",
+            "#1F3A5F" to "靛",
+            "#2E5E36" to "墨绿",
+            "#7A2E2E" to "酒红",
+            "#5C5C5C" to "灰"
+        )
+        colorOptions.forEach { (hex, label) ->
+            val sw = android.widget.TextView(this).apply {
+                text = label
+                textSize = 12f
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                val lp = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                lp.marginEnd = dp(8)
+                layoutParams = lp
+                setBackgroundColor(
+                    if (settings.fontColor == hex) Color.parseColor("#33000000") else Color.TRANSPARENT
+                )
+                setTextColor(if (hex.isBlank()) Color.parseColor("#666666") else Color.parseColor(hex))
+                setOnClickListener {
+                    settings.fontColor = hex
+                    // Refresh swatch highlights
+                    for (j in 0 until colorRow.childCount) {
+                        colorRow.getChildAt(j).setBackgroundColor(Color.TRANSPARENT)
+                    }
+                    setBackgroundColor(Color.parseColor("#33000000"))
+                }
+            }
+            colorRow.addView(sw)
+        }
+
         AlertDialog.Builder(this).setTitle("字体设置").setView(dialogView)
             .setPositiveButton("确定") { _, _ -> reloadCurrentChapter() }
             .setNegativeButton("取消", null).show()
@@ -833,11 +910,57 @@ class ReaderActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         saveProgress()
+        // Going back to the bookshelf must stop ongoing TTS — it would be
+        // confusing for the user to hear the previous book still being read.
+        if (isFinishing) {
+            try { ttsService?.doStop() } catch (_: Throwable) {}
+            try { stopService(Intent(this, TtsService::class.java)) } catch (_: Throwable) {}
+        }
         if (ttsBound) { try { unbindService(ttsConn) } catch (_: Throwable) {}; ttsBound = false }
     }
 
     companion object {
         const val EXTRA_BOOK_ID = "book_id"
         private const val REQ_NOTIF = 1101
+
+        /** Script injected into every chapter's HTML so the WebView can do
+         *  exact-line-aligned pagination (knows real computed line-height
+         *  and snaps page boundaries to it, eliminating clipped half-lines). */
+        private const val READER_JS = """
+            <script>
+              window.__lisbLh=null;
+              function lisbInit(){
+                try{
+                  var s=getComputedStyle(document.body);
+                  var lh=s.lineHeight;
+                  if(lh==='normal'){lh=parseFloat(s.fontSize)*1.3;}
+                  else{lh=parseFloat(lh);}
+                  if(!isFinite(lh)||lh<=0){lh=24;}
+                  window.__lisbLh=lh;
+                }catch(e){window.__lisbLh=24;}
+              }
+              function lisbPageStep(){
+                if(window.__lisbLh==null)lisbInit();
+                var lh=window.__lisbLh||30;
+                var vh=window.innerHeight;
+                return Math.max(lh,Math.floor(vh/lh)*lh);
+              }
+              function lisbScrollByPage(dir){
+                if(window.__lisbLh==null)lisbInit();
+                var step=lisbPageStep();
+                var doc=document.documentElement,body=document.body;
+                var sh=Math.max(doc.scrollHeight,body.scrollHeight);
+                var maxY=Math.max(0,sh-window.innerHeight);
+                var cur=Math.round(window.scrollY);
+                if(dir<0&&cur<=2)return 'PREV_CHAPTER';
+                if(dir>0&&cur>=maxY-2)return 'NEXT_CHAPTER';
+                var ny=cur+dir*step;
+                if(ny<0)ny=0; if(ny>maxY)ny=maxY;
+                window.scrollTo(0,ny);
+                return String(ny);
+              }
+              window.addEventListener('load',lisbInit);
+            </script>
+        """
     }
 }
