@@ -36,7 +36,9 @@ class EpubBook private constructor(
         /** Original <body> inner HTML, with <img src> rewritten to data: URIs. */
         val bodyHtml: String,
         /** Plain text used by TTS / progress estimation. */
-        val plainText: String
+        val plainText: String,
+        /** Original spine resource href (e.g. "Text/chapter1.xhtml") for link resolution. */
+        val sourceHref: String = ""
     )
 
     companion object {
@@ -80,7 +82,7 @@ class EpubBook private constructor(
                     ?: "第 ${index + 1} 章"
 
                 val headHtml = doc.head()?.html().orEmpty()
-                Chapter(index, chapterTitle, headHtml, body.html(), plain)
+                Chapter(index, chapterTitle, headHtml, body.html(), plain, res.href ?: "")
             }
             return EpubBook(id, title, author, null, chapters)
         }

@@ -110,9 +110,15 @@ class TtsManager(context: Context) {
 
     private fun enqueueFromNextIndex() {
         val t = tts ?: return
+        // First utterance after a (re)start must use QUEUE_FLUSH so any
+        // leftover speech from the previous request is wiped — otherwise
+        // tts.stop() alone is not always enough on some engines and the
+        // user hears the old text for a moment after paging / jumping.
+        var first = true
         for (i in nextIndex until chunks.size) {
-            val params = Bundle()
-            t.speak(chunks[i], TextToSpeech.QUEUE_ADD, params, "$idPrefix#$i")
+            val mode = if (first) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            t.speak(chunks[i], mode, Bundle(), "$idPrefix#$i")
+            first = false
         }
     }
 
@@ -123,23 +129,41 @@ class TtsManager(context: Context) {
     }
 
     companion object {
-        /** Split into ~maxLen char chunks aligned to sentence boundaries. */
-        fun splitForTts(text: String, maxLen: Int = 180): List<String> {
+        /** Split [text] into ONE chunk per sentence so the on-screen
+         *  highlight tracks a single sentence at a time. Sentences longer
+         *  than [maxLen] are broken at the next comma to keep individual
+         *  utterances bounded for the TTS engine. */
+        fun splitForTts(text: String, maxLen: Int = 220): List<String> {
             val clean = text.trim()
             if (clean.isEmpty()) return emptyList()
-            if (clean.length <= maxLen) return listOf(clean)
-            val out = mutableListOf<String>()
+            val sentences = mutableListOf<String>()
             val buf = StringBuilder()
             for (ch in clean) {
                 buf.append(ch)
-                val isBreak = ch == '。' || ch == '！' || ch == '？' || ch == '\n' ||
-                              ch == '.' || ch == '!' || ch == '?'
-                if (buf.length >= maxLen && isBreak) {
-                    out.add(buf.toString().trim())
+                val isEnd = ch == '。' || ch == '！' || ch == '？' ||
+                            ch == '\n' || ch == '…' ||
+                            ch == '.' || ch == '!' || ch == '?'
+                if (isEnd) {
+                    val s = buf.toString().trim()
+                    if (s.isNotEmpty()) sentences.add(s)
                     buf.clear()
                 }
             }
-            if (buf.isNotBlank()) out.add(buf.toString().trim())
+            if (buf.isNotBlank()) sentences.add(buf.toString().trim())
+            val out = mutableListOf<String>()
+            for (s in sentences) {
+                if (s.length <= maxLen) { out.add(s); continue }
+                val sub = StringBuilder()
+                for (ch in s) {
+                    sub.append(ch)
+                    val soft = ch == '，' || ch == '、' || ch == '；' ||
+                               ch == ',' || ch == ';'
+                    if (sub.length >= maxLen && soft) {
+                        out.add(sub.toString().trim()); sub.clear()
+                    }
+                }
+                if (sub.isNotBlank()) out.add(sub.toString().trim())
+            }
             return out
         }
     }

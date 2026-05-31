@@ -56,6 +56,12 @@ class ReaderActivity : AppCompatActivity() {
     private var book: EpubBook? = null
     private var currentChapter: Int = 0
     private var pendingScrollY: Int = 0
+    // Cached state mirrored from the JS virtual-scroll engine. Updated on
+    // every page turn / chapter load. The WebView never scrolls natively
+    // anymore (overflow:hidden), so webView.scrollY would always be 0.
+    private var currentVirtualY: Int = 0  // CSS px
+    private var currentPage: Int = 1
+    private var currentTotal: Int = 1
     private var menuVisible = false
 
     /** When true, the WebView shows a plain-text "TTS mode" rendering where
@@ -184,22 +190,41 @@ class ReaderActivity : AppCompatActivity() {
         webView.isVerticalScrollBarEnabled = false
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                if (pendingScrollY > 0) {
-                    view?.postDelayed({
-                        view.scrollTo(0, pendingScrollY); pendingScrollY = 0
+                // Give the WebView a tick so getComputedStyle sees the real
+                // line-height before we restore scroll position.
+                view?.postDelayed({
+                    if (pendingScrollY > 0) {
+                        webView.evaluateJavascript("lisbSetY($pendingScrollY)", null)
+                        pendingScrollY = 0
+                    }
+                    refreshPageInfo {
                         updateIndicators()
                         firePendingTtsStartIfAny()
-                    }, 80)
-                } else {
-                    view?.postDelayed({
-                        updateIndicators()
-                        firePendingTtsStartIfAny()
-                    }, 60)
-                }
+                    }
+                }, 80)
                 updateProgressText()
             }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                // EPUB TOC pages often have internal links like
+                // "chapter1.xhtml" or "#section". Since we load via
+                // loadDataWithBaseURL(null,...), these resolve to about:blank
+                // or data: scheme URLs that would navigate the WebView to a
+                // blank page. Intercept and try to match to a chapter.
+                val url = request?.url?.toString() ?: return true
+                handleInternalLink(url)
+                return true // always consume — never let WebView navigate away
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                url?.let { handleInternalLink(it) }
+                return true
+            }
         }
-        webView.viewTreeObserver.addOnScrollChangedListener { updateIndicators() }
+        // No native scrolling happens (overflow:hidden) so the scroll-changed
+        // listener would never fire — indicator refreshes are driven by
+        // refreshPageInfo() after every page turn instead.
     }
 
     /** Called after a TTS-mode chapter finishes loading; if a chunk was
@@ -210,6 +235,7 @@ class ReaderActivity : AppCompatActivity() {
         val svc = ttsService ?: return
         ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
         svc.setRate(settings.ttsRate)
+        webView.evaluateJavascript("lisbSetMinChunk($idx)", null)
         svc.startSpeaking(currentChapter, idx)
     }
 
@@ -227,14 +253,32 @@ class ReaderActivity : AppCompatActivity() {
         val minSwipePx = 60f * density
         val gd = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
-                val w = webView.width; val h = webView.height
-                if (w <= 0 || h <= 0) return false
-                val x = e.x; val y = e.y
-                when {
-                    y < h * 0.20f -> toggleMenu()
-                    x < w * 0.33f -> goPreviousPage()
-                    x > w * 0.67f -> goNextPage()
-                    else -> toggleMenu()
+                // If the tap landed on an image, let the JS zoom handler take
+                // over instead of turning the page. We check via HitTestResult.
+                val hit = webView.hitTestResult
+                if (hit.type == WebView.HitTestResult.IMAGE_TYPE ||
+                    hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                    return false // don't turn page; JS click handler shows zoom
+                }
+                // If zoom overlay is currently shown, dismiss it via JS and
+                // suppress page turn. (The overlay's own click handler will
+                // hide it, but we need to also suppress the Kotlin action.)
+                webView.evaluateJavascript("lisbIsZoomShown()") { raw ->
+                    val shown = raw?.trim('"') == "true"
+                    if (shown) {
+                        webView.evaluateJavascript(
+                            "document.getElementById('lisb-img-overlay').click();", null)
+                        return@evaluateJavascript
+                    }
+                    val w = webView.width; val h = webView.height
+                    if (w <= 0 || h <= 0) return@evaluateJavascript
+                    val x = e.x; val y = e.y
+                    when {
+                        y < h * 0.20f -> toggleMenu()
+                        x < w * 0.33f -> goPreviousPage()
+                        x > w * 0.67f -> goNextPage()
+                        else -> toggleMenu()
+                    }
                 }
                 return true
             }
@@ -331,11 +375,25 @@ class ReaderActivity : AppCompatActivity() {
         val fc = settings.fontColor
         val fontColorRule = if (fc.isNotBlank()) "body,body *{color:$fc !important;}" else ""
 
+        // Some EPUBs have TOC entries that point to chapters with empty
+        // body markup (e.g. a wrapper file that only links elsewhere).
+        // Without a fallback, the page renders blank and the user can
+        // get stuck. Reuse the plain-text extract as a last resort.
+        val rawBody = chapter.bodyHtml
+        val strippedForCheck = rawBody.replace(Regex("<[^>]+>"), "").trim()
+        val effectiveBody = if (strippedForCheck.isEmpty()) {
+            val pt = chapter.plainText.trim()
+            if (pt.isEmpty()) "<p style=\"text-align:center;color:#888;margin-top:2em;\">本章为空</p>"
+            else "<div>" + htmlEscape(pt).replace("\n\n", "</p><p>").replace("\n", "<br>").let { "<p>$it</p>" } + "</div>"
+        } else rawBody
+
         return if (settings.preserveEpubStyle) {
             val overlay = """
                 <style id="lisb-theme-overlay">
                   html,body{${theme.css}}
-                  body{padding:18px 20px 28px 20px;}
+                  html,body{overflow:hidden!important;height:100%!important;margin:0!important;padding:0!important;}
+                  body{padding:0 20px!important;}
+                  #lisb-content{will-change:transform;}
                   $fontColorRule
                   img{max-width:100%;height:auto;}
                 </style>
@@ -349,7 +407,7 @@ class ReaderActivity : AppCompatActivity() {
                 $overlay
                 $READER_JS
                 </head>
-                <body>${chapter.bodyHtml}</body></html>
+                <body><div id="lisb-content">${effectiveBody}</div></body></html>
             """.trimIndent()
         } else {
             val colorCss = if (fc.isNotBlank()) "color:$fc;" else ""
@@ -358,10 +416,11 @@ class ReaderActivity : AppCompatActivity() {
                 <html><head><meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
                 <style>
-                  html,body{margin:0;padding:0;${theme.css}}
+                  html,body{margin:0;padding:0;overflow:hidden;height:100%;${theme.css}}
                   body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                        letter-spacing:${"%.3f".format(ls)}em;
-                       padding:18px 20px 28px 20px;text-align:justify;word-wrap:break-word;$colorCss}
+                       padding:0 20px;text-align:justify;word-wrap:break-word;$colorCss}
+                  #lisb-content{will-change:transform;}
                   p{margin:0 0 0.9em 0;text-indent:2em;}
                   h1,h2,h3{font-weight:600;margin:1em 0 0.6em;text-indent:0;letter-spacing:0;}
                   img{max-width:100%;height:auto;}
@@ -369,7 +428,7 @@ class ReaderActivity : AppCompatActivity() {
                 </style>
                 $READER_JS
                 </head>
-                <body>${chapter.bodyHtml}</body></html>
+                <body><div id="lisb-content">${effectiveBody}</div></body></html>
             """.trimIndent()
         }
     }
@@ -410,10 +469,11 @@ class ReaderActivity : AppCompatActivity() {
             <html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
             <style>
-              html,body{margin:0;padding:0;${theme.css}}
+              html,body{margin:0;padding:0;overflow:hidden;height:100%;${theme.css}}
               body{font-family:${font.css};font-size:${size}px;line-height:$lh;
                    letter-spacing:${"%.3f".format(ls)}em;
-                   padding:18px 20px 28px 20px;text-align:justify;word-wrap:break-word;$colorCss}
+                   padding:0 20px;text-align:justify;word-wrap:break-word;$colorCss}
+              #lisb-content{will-change:transform;}
               .tts-chunk{transition:background-color .15s;border-radius:3px;padding:0 1px;}
               .tts-active{$highlightCss}
               img{max-width:100%;height:auto;}
@@ -422,20 +482,19 @@ class ReaderActivity : AppCompatActivity() {
             <script>
               window.__lisbCur=null;
               function lisbHighlight(i){
+                if(i<(window.__lisbMinChunk||0))return; // stale callback
                 if(window.__lisbCur!=null){var p=document.getElementById('tts-'+window.__lisbCur);if(p)p.classList.remove('tts-active');}
                 window.__lisbCur=i;
                 var el=document.getElementById('tts-'+i);
                 if(!el)return;
                 el.classList.add('tts-active');
-                var r=el.getBoundingClientRect();
-                if(r.top<0||r.bottom>window.innerHeight){
-                  if(window.__lisbLh==null&&typeof lisbInit==='function')lisbInit();
-                  var step=(typeof lisbPageStep==='function')?lisbPageStep():window.innerHeight;
-                  var t=window.scrollY+r.top;
-                  t=Math.floor(t/step)*step;
-                  if(t<0)t=0;
-                  window.scrollTo(0,t);
-                }
+                if(window.__lisbPages==null&&typeof lisbBuildPages==='function')lisbBuildPages();
+                var pages=window.__lisbPages||[0];
+                var topAbs=el.offsetTop;
+                var curIdx=(typeof lisbPageIndex==='function')?lisbPageIndex():0;
+                var chunkIdx=0;
+                for(var k=pages.length-1;k>=0;k--){if(pages[k]<=topAbs+2){chunkIdx=k;break;}}
+                if(chunkIdx!==curIdx){lisbApplyY(pages[chunkIdx]);}
               }
               function lisbFirstChunkAt(y){
                 var spans=document.getElementsByClassName('tts-chunk');
@@ -447,7 +506,7 @@ class ReaderActivity : AppCompatActivity() {
               }
             </script>
             </head>
-            <body>${body}</body></html>
+            <body><div id="lisb-content">${body}</div></body></html>
         """.trimIndent()
     }
 
@@ -456,38 +515,29 @@ class ReaderActivity : AppCompatActivity() {
 
     // ---- Pagination helpers ----
 
-    /** Page step equals the WebView's full visible height — SNAPPED DOWN to a
-     *  multiple of the CSS line-height. Without snapping, a page boundary
-     *  inevitably falls mid-line, so the previous page's last line is half-
-     *  cut at the bottom and the next page's first line is half-cut at the
-     *  top. Snapping turns that cut into a tiny blank strip at the page
-     *  bottom instead, which is the standard reader behaviour. */
-    private fun pageStepPx(): Int {
-        val h = webView.height
-        if (h <= 0) return 1
-        val lh = lineHeightDevicePx()
-        if (lh <= 0) return h
-        return max(lh, (h / lh) * lh)
+    /** Parse the "y|page|total" string produced by JS into our cached
+     *  state and invoke the callback on the UI thread. */
+    private fun applyPageInfo(raw: String?, after: (() -> Unit)? = null) {
+        val v = raw?.trim('"') ?: return
+        val parts = v.split('|')
+        if (parts.size < 3) return
+        val y = parts[0].toIntOrNull() ?: return
+        val p = parts[1].toIntOrNull() ?: return
+        val t = parts[2].toIntOrNull() ?: return
+        currentVirtualY = y; currentPage = p; currentTotal = t
+        after?.invoke()
     }
 
-    /** Approximate CSS line-height in device pixels, derived from settings. */
-    private fun lineHeightDevicePx(): Int {
-        val density = resources.displayMetrics.density
-        return max(1, (settings.fontSizePx * settings.lineHeight * density).toInt())
+    private fun refreshPageInfo(after: (() -> Unit)? = null) {
+        webView.evaluateJavascript("lisbPageInfo()") { raw ->
+            applyPageInfo(raw, after)
+        }
     }
 
-    private fun totalPagesInChapter(): Int {
-        val totalContent = (webView.contentHeight * resources.displayMetrics.density).toInt()
-        return max(1, ceil(totalContent.toDouble() / pageStepPx()).toInt())
-    }
-
-    private fun currentPageInChapter(): Int =
-        (webView.scrollY / pageStepPx()) + 1
+    private fun totalPagesInChapter(): Int = currentTotal
+    private fun currentPageInChapter(): Int = currentPage
 
     private fun goNextPage() {
-        // Delegate to JS which knows the exact CSS line-height, so every page
-        // boundary lands precisely between two lines of text (no half-glyphs
-        // peeking from the top or bottom).
         webView.evaluateJavascript("lisbScrollByPage(1)") { raw ->
             val v = raw?.trim('"') ?: return@evaluateJavascript
             if (v == "NEXT_CHAPTER") {
@@ -499,8 +549,10 @@ class ReaderActivity : AppCompatActivity() {
                     Toast.makeText(this, "已是最后一页", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                saveProgress(); updateProgressText(); updateIndicators()
-                syncTtsToCurrentPage()
+                applyPageInfo(raw) {
+                    saveProgress(); updateProgressText(); updateIndicators()
+                    if (isTtsActive) syncTtsAfterPage()
+                }
             }
         }
     }
@@ -516,30 +568,33 @@ class ReaderActivity : AppCompatActivity() {
                     Toast.makeText(this, "已是第一页", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                saveProgress(); updateProgressText(); updateIndicators()
-                syncTtsToCurrentPage()
+                applyPageInfo(raw) {
+                    saveProgress(); updateProgressText(); updateIndicators()
+                    if (isTtsActive) syncTtsAfterPage()
+                }
             }
         }
     }
 
     /** When the user manually pages while TTS is playing, jump the TTS
      *  pointer to the first sentence visible on the new page so the voice
-     *  follows the eye. */
-    private fun syncTtsToCurrentPage() {
+     *  follows the eye. Uses the ALREADY-UPDATED currentVirtualY (set by
+     *  applyPageInfo before this is called). */
+    private fun syncTtsAfterPage() {
         val svc = ttsService ?: return
         if (!isTtsActive) return
-        // Query JS for the chunk index whose bottom is below the viewport
-        // top, then restart speaking from there.
-        val cssScrollY = (webView.scrollY / resources.displayMetrics.density).toInt()
-        webView.evaluateJavascript("lisbFirstChunkAt($cssScrollY)") { raw ->
+        if (!svc.playing) return
+        val y = currentVirtualY
+        webView.evaluateJavascript("lisbFirstChunkAt($y)") { raw ->
             val v = raw?.trim('"')?.toIntOrNull() ?: return@evaluateJavascript
+            webView.evaluateJavascript("lisbSetMinChunk($v)", null)
             svc.startSpeaking(currentChapter, v)
         }
     }
 
     private fun saveProgress() {
         val b = book ?: return
-        settings.saveProgress(b.id, currentChapter, webView.scrollY)
+        settings.saveProgress(b.id, currentChapter, currentVirtualY)
     }
 
     private fun updateProgressText() {
@@ -715,6 +770,65 @@ class ReaderActivity : AppCompatActivity() {
             }.setNegativeButton("关闭", null).show()
     }
 
+    /** Handle a link click inside the WebView. EPUB internal links often
+     *  look like "chapter3.xhtml#sec1" or just "#footnote5". We try to
+     *  resolve them to one of the loaded chapters. */
+    private fun handleInternalLink(url: String) {
+        val b = book ?: return
+        // Extract the file component (e.g. "chapter3.xhtml")
+        val filePart = url.substringAfterLast('/').substringBefore('#')
+        val fragment = if ('#' in url) url.substringAfter('#') else ""
+
+        if (filePart.isBlank() && fragment.isNotBlank()) {
+            // Pure in-page anchor like "#footnote". Scroll within current chapter.
+            webView.evaluateJavascript("""
+                (function(){
+                  var el=document.getElementById('$fragment');
+                  if(!el)return '-1';
+                  if(window.__lisbPages==null&&typeof lisbBuildPages==='function')lisbBuildPages();
+                  var pages=window.__lisbPages||[0];
+                  var top=el.offsetTop;
+                  var idx=0;
+                  for(var i=pages.length-1;i>=0;i--){if(pages[i]<=top+2){idx=i;break;}}
+                  if(typeof lisbApplyY==='function')lisbApplyY(pages[idx]);
+                  return (typeof lisbPageInfo==='function')?lisbPageInfo():'-1';
+                })()
+            """.trimIndent()) { raw -> applyPageInfo(raw) { updateIndicators() } }
+            return
+        }
+
+        // Try to match filePart against chapter sourceHref.
+        // sourceHref looks like "Text/chapter3.xhtml" or "OEBPS/ch03.html"
+        val filePartLower = filePart.lowercase()
+        for ((i, ch) in b.chapters.withIndex()) {
+            val chFile = ch.sourceHref.substringAfterLast('/').lowercase()
+            if (chFile == filePartLower) {
+                loadChapter(i, scrollY = 0)
+                return
+            }
+        }
+        // Also try partial match (without extension)
+        val fileNoExt = filePartLower.substringBefore('.')
+        if (fileNoExt.isNotBlank()) {
+            for ((i, ch) in b.chapters.withIndex()) {
+                val chFile = ch.sourceHref.substringAfterLast('/').lowercase().substringBefore('.')
+                if (chFile == fileNoExt) {
+                    loadChapter(i, scrollY = 0)
+                    return
+                }
+            }
+        }
+        // If there's a fragment, search chapter bodyHtml for id="fragment"
+        if (fragment.isNotBlank()) {
+            for ((i, ch) in b.chapters.withIndex()) {
+                if (ch.bodyHtml.contains("id=\"$fragment\"")) {
+                    loadChapter(i, scrollY = 0)
+                    return
+                }
+            }
+        }
+    }
+
     private fun showBrightnessDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_brightness, null)
         val seek = view.findViewById<SeekBar>(R.id.brightnessSeek)
@@ -868,6 +982,7 @@ class ReaderActivity : AppCompatActivity() {
         }
         ContextCompat.startForegroundService(this, Intent(this, TtsService::class.java))
         svc.setRate(settings.ttsRate)
+        webView.evaluateJavascript("lisbSetMinChunk($startChunk)", null)
         svc.startSpeaking(currentChapter, startChunk)
         Toast.makeText(this, "开始朗读", Toast.LENGTH_SHORT).show()
     }
@@ -928,7 +1043,29 @@ class ReaderActivity : AppCompatActivity() {
          *  and snaps page boundaries to it, eliminating clipped half-lines). */
         private const val READER_JS = """
             <script>
+              // Virtual-scroll engine. html/body are overflow:hidden so the
+              // user CANNOT free-drag the page. The chapter content lives
+              // inside #lisb-content, which we translate with CSS transform.
+              //
+              // Pagination strategy: we DO NOT assume "page step = N lines"
+              // because paragraph margins, headings, images, and inline-
+              // styled EPUB CSS make consecutive lines land at irregular
+              // y-offsets. Instead we enumerate the y-top of EVERY rendered
+              // text line via Range.getClientRects() and then build the page
+              // list by repeatedly stepping forward to the first line whose
+              // top exceeds the previous page's effective bottom. This
+              // guarantees that no page boundary ever cuts a line in half.
               window.__lisbLh=null;
+              window.__lisbY=0;
+              window.__lisbLines=null;
+              window.__lisbPages=null;
+              // Suppress stale TTS highlight callbacks: when ReaderActivity
+              // restarts speech at a new chunk, it bumps this value first.
+              // Highlights for chunks < __lisbMinChunk are dropped so that
+              // a late-arriving onStart from the previous utterance can't
+              // auto-scroll the page back.
+              window.__lisbMinChunk=0;
+              function lisbC(){return document.getElementById('lisb-content');}
               function lisbInit(){
                 try{
                   var s=getComputedStyle(document.body);
@@ -937,29 +1074,174 @@ class ReaderActivity : AppCompatActivity() {
                   else{lh=parseFloat(lh);}
                   if(!isFinite(lh)||lh<=0){lh=24;}
                   window.__lisbLh=lh;
+                  var c=lisbC();
+                  if(c){
+                    c.style.paddingTop=Math.round(lh*0.5)+'px';
+                    c.style.paddingBottom=Math.round(lh*0.5)+'px';
+                    c.style.position='relative';
+                    var fc=c.firstElementChild;
+                    if(fc){fc.style.marginTop='0';fc.style.paddingTop='0';}
+                    var lc=c.lastElementChild;
+                    if(lc){lc.style.marginBottom='0';lc.style.paddingBottom='0';}
+                  }
+                  window.__lisbLines=null;
+                  window.__lisbPages=null;
                 }catch(e){window.__lisbLh=24;}
               }
-              function lisbPageStep(){
+              function lisbBuildLines(){
+                var c=lisbC();
+                if(!c){window.__lisbLines=[];return;}
+                // Must measure with content un-translated so offsets are
+                // absolute in #lisb-content's coordinate space.
+                var savedTransform=c.style.transform;
+                c.style.transform='translateY(0)';
+                var arr=[];
+                try{
+                  var walker=document.createTreeWalker(c,NodeFilter.SHOW_TEXT,null);
+                  var n;
+                  while(n=walker.nextNode()){
+                    var v=n.nodeValue;
+                    if(!v||!v.replace(/\s+/g,'').length)continue;
+                    var r=document.createRange();
+                    r.selectNodeContents(n);
+                    var rects=r.getClientRects();
+                    for(var i=0;i<rects.length;i++){
+                      var rc=rects[i];
+                      if(rc.width<1||rc.height<1)continue;
+                      arr.push(Math.round(rc.top));
+                    }
+                  }
+                }catch(e){}
+                c.style.transform=savedTransform;
+                arr.sort(function(a,b){return a-b;});
+                var out=[];
+                for(var i=0;i<arr.length;i++){
+                  if(out.length===0||arr[i]-out[out.length-1]>2)out.push(arr[i]);
+                }
+                window.__lisbLines=out;
+              }
+              function lisbBuildPages(){
                 if(window.__lisbLh==null)lisbInit();
+                if(window.__lisbLines==null)lisbBuildLines();
+                var lines=window.__lisbLines||[];
                 var lh=window.__lisbLh||30;
                 var vh=window.innerHeight;
-                return Math.max(lh,Math.floor(vh/lh)*lh);
+                var maxY=lisbMaxY();
+                var pages=[0];
+                if(maxY<=0){window.__lisbPages=pages;return;}
+                var py=0,guard=0;
+                while(guard++<99999){
+                  var threshold=py+vh-lh;
+                  var next=-1;
+                  for(var i=0;i<lines.length;i++){
+                    if(lines[i]>threshold){next=lines[i];break;}
+                  }
+                  if(next<0||next<=py+1)break;
+                  // Clamp: if this page-top exceeds maxY, use maxY as the
+                  // final page and stop. This prevents the "stuck on second-
+                  // to-last page" bug where lisbApplyY clamps to maxY which
+                  // doesn't match any entry in pages[].
+                  if(next>maxY){
+                    if(pages[pages.length-1]<maxY)pages.push(maxY);
+                    break;
+                  }
+                  pages.push(next);
+                  py=next;
+                }
+                // Ensure maxY is always reachable as the final page so the
+                // user can always reach the true end of a chapter.
+                if(pages[pages.length-1]<maxY && maxY-pages[pages.length-1]>lh*0.5){
+                  pages.push(maxY);
+                }
+                window.__lisbPages=pages;
+              }
+              function lisbMaxY(){
+                var c=lisbC();
+                if(!c)return 0;
+                return Math.max(0,c.scrollHeight-window.innerHeight);
+              }
+              function lisbApplyY(y){
+                var maxY=lisbMaxY();
+                if(y<0)y=0; if(y>maxY)y=maxY;
+                window.__lisbY=y;
+                var c=lisbC();
+                if(c)c.style.transform='translateY('+(-y)+'px)';
+              }
+              function lisbSetY(y){
+                if(window.__lisbPages==null)lisbBuildPages();
+                lisbApplyY(y);
+              }
+              function lisbPageIndex(){
+                if(window.__lisbPages==null)lisbBuildPages();
+                var pages=window.__lisbPages;
+                var y=window.__lisbY;
+                var idx=0;
+                for(var i=pages.length-1;i>=0;i--){
+                  if(pages[i]<=y+2){idx=i;break;}
+                }
+                return idx;
+              }
+              function lisbPageInfo(){
+                if(window.__lisbPages==null)lisbBuildPages();
+                var pages=window.__lisbPages;
+                var idx=lisbPageIndex();
+                return window.__lisbY+'|'+(idx+1)+'|'+pages.length;
               }
               function lisbScrollByPage(dir){
-                if(window.__lisbLh==null)lisbInit();
-                var step=lisbPageStep();
-                var doc=document.documentElement,body=document.body;
-                var sh=Math.max(doc.scrollHeight,body.scrollHeight);
-                var maxY=Math.max(0,sh-window.innerHeight);
-                var cur=Math.round(window.scrollY);
-                if(dir<0&&cur<=2)return 'PREV_CHAPTER';
-                if(dir>0&&cur>=maxY-2)return 'NEXT_CHAPTER';
-                var ny=cur+dir*step;
-                if(ny<0)ny=0; if(ny>maxY)ny=maxY;
-                window.scrollTo(0,ny);
-                return String(ny);
+                if(window.__lisbPages==null)lisbBuildPages();
+                var pages=window.__lisbPages;
+                var cur=lisbPageIndex();
+                if(dir<0&&cur<=0)return 'PREV_CHAPTER';
+                if(dir>0&&cur>=pages.length-1)return 'NEXT_CHAPTER';
+                var ni=cur+dir;
+                if(ni<0)ni=0; if(ni>pages.length-1)ni=pages.length-1;
+                lisbApplyY(pages[ni]);
+                return lisbPageInfo();
               }
-              window.addEventListener('load',lisbInit);
+              function lisbSetMinChunk(i){window.__lisbMinChunk=i|0;}
+              function lisbInitAll(){
+                lisbInit();
+                lisbBuildLines();
+                lisbBuildPages();
+                lisbSetupImgZoom();
+              }
+              // --- Image click-to-zoom overlay ---
+              window.__lisbZoomShown=false;
+              function lisbIsZoomShown(){return window.__lisbZoomShown;}
+              function lisbSetupImgZoom(){
+                var overlay=document.getElementById('lisb-img-overlay');
+                if(!overlay){
+                  overlay=document.createElement('div');
+                  overlay.id='lisb-img-overlay';
+                  overlay.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;align-items:center;justify-content:center;';
+                  overlay.innerHTML='<img id=\"lisb-img-zoom\" style=\"max-width:95%;max-height:95%;object-fit:contain;\"/>';
+                  document.body.appendChild(overlay);
+                  overlay.addEventListener('click',function(){
+                    overlay.style.display='none';
+                    window.__lisbZoomShown=false;
+                  });
+                }
+                var imgs=document.querySelectorAll('#lisb-content img');
+                for(var i=0;i<imgs.length;i++){
+                  imgs[i].style.cursor='pointer';
+                  imgs[i].addEventListener('click',function(e){
+                    e.stopPropagation();
+                    var ov=document.getElementById('lisb-img-overlay');
+                    var z=document.getElementById('lisb-img-zoom');
+                    z.src=this.src;
+                    ov.style.display='flex';
+                    window.__lisbZoomShown=true;
+                  });
+                }
+              }
+              // Run after fonts and images settle. window.load fires after
+              // all sub-resources, so line metrics are final by then.
+              window.addEventListener('load',function(){
+                lisbInitAll();
+                // Rebuild once more after a microtask: some EPUB CSS that
+                // loads via <link> may finish layout in a follow-up tick.
+                setTimeout(lisbInitAll,50);
+              });
             </script>
         """
     }

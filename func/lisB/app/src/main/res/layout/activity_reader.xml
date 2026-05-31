@@ -134,7 +134,7 @@
             <TextView android:id="@+id/btnToc" style="@style/ReaderMenuButton" android:text="目录"/>
             <TextView android:id="@+id/btnFont" style="@style/ReaderMenuButton" android:text="字体"/>
             <TextView android:id="@+id/btnTheme" style="@style/ReaderMenuButton" android:text="主题"/>
-            <TextView android:id="@+id/btnBrightness" style="@style/ReaderMenuButton" android:text="亮度/外观"/>
+            <TextView android:id="@+id/btnBrightness" style="@style/ReaderMenuButton" android:text="外观"/>
             <TextView android:id="@+id/btnTts" style="@style/ReaderMenuButton" android:text="朗读"/>
         </LinearLayout>
     </LinearLayout>
