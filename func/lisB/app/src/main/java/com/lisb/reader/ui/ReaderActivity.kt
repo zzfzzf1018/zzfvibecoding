@@ -1183,7 +1183,34 @@ class ReaderActivity : AppCompatActivity() {
                 if(y<0)y=0; if(y>maxY)y=maxY;
                 window.__lisbY=y;
                 var w=lisbW();
-                if(w)w.scrollTop=y;
+                if(w){
+                  w.scrollTop=y;
+                  // Cover any partially-visible line at the bottom that
+                  // belongs to the next page. The mask is a fixed-position
+                  // div matching the body background.
+                  var mask=document.getElementById('lisb-page-mask');
+                  if(!mask){
+                    mask=document.createElement('div');
+                    mask.id='lisb-page-mask';
+                    mask.style.cssText='position:fixed;bottom:0;left:0;width:100%;pointer-events:none;z-index:98;';
+                    document.body.appendChild(mask);
+                  }
+                  var pages=window.__lisbPages||[0];
+                  var idx=lisbPageIndex();
+                  if(idx<pages.length-1){
+                    var nextY=pages[idx+1];
+                    var gap=w.clientHeight-(nextY-y);
+                    if(gap>0&&gap<w.clientHeight*0.4){
+                      mask.style.height=gap+'px';
+                      mask.style.backgroundColor=getComputedStyle(document.body).backgroundColor;
+                      mask.style.display='block';
+                    }else{
+                      mask.style.display='none';
+                    }
+                  }else{
+                    mask.style.display='none';
+                  }
+                }
               }
               function lisbSetY(y){
                 if(window.__lisbPages==null)lisbBuildPages();
