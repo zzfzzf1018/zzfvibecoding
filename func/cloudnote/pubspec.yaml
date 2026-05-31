@@ -1,0 +1,42 @@
+name: cloudnote
+description: Cross-platform (Windows + Android) Markdown note app with Git/GitHub cloud sync.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # UI / markdown
+  flutter_markdown: ^0.7.3
+  markdown: ^7.2.2
+  google_fonts: ^6.2.1
+  # State / persistence
+  provider: ^6.1.2
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  uuid: ^4.5.1
+  # Networking / auth
+  http: ^1.2.2
+  url_launcher: ^6.3.1
+  flutter_secure_storage: ^9.2.2
+  # NOTE: Image clipboard paste is exposed via an injection point in
+  # ClipboardService so a plugin (super_clipboard, rich_clipboard, or a
+  # custom platform channel) can be wired per host without coupling.
+  #
+  # Git: ProcessGitService shells out to the system `git` binary on the
+  # desktop. On Android the planned fallback is the GitHub REST Contents
+  # API (see docs/DESIGN.md "Mobile git strategy").
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,44 @@
+# Build / IDE
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.idea/
+.vscode/
+*.iml
+*.log
+
+# Flutter generated platform folders may be regenerated; keep custom changes
+# but ignore pure build outputs.
+**/Generated.xcconfig
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_*.png
+**/Flutter/flutter_export_environment.sh
+**/Pods/
+
+# Android
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/android/key.properties
+*.keystore
+*.jks
+
+# Windows
+**/windows/flutter/ephemeral/
+**/windows/**/Debug/
+**/windows/**/Release/
+**/windows/**/x64/
+
+# Secrets / local config
+.env
+.env.local
+secrets.json
+github_oauth.json
+
+# Coverage / test output
+coverage/
+test/.test_coverage.dart
