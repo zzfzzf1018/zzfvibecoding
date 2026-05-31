@@ -959,14 +959,17 @@ class ReaderActivity : AppCompatActivity() {
     private fun currentPageChunkIndex(plainText: String): Int {
         val chunks = TtsManager.splitForTts(plainText)
         if (chunks.isEmpty()) return 0
-        // Use the virtual scroll Y (CSS px) since WebView native scroll is
-        // always 0 in our overflow:hidden virtual-scroll architecture.
-        val maxY = currentTotal.let { total ->
-            if (total <= 1) 1 else total - 1
+        // Compute total characters that appear BEFORE the current page.
+        // This gives a much more accurate mapping than page-ratio because
+        // page sizes vary (images, headings, margins).
+        val charsBefore = plainText.length.toFloat() *
+                (if (currentTotal <= 1) 0f else (currentPage - 1).toFloat() / currentTotal.toFloat())
+        var acc = 0
+        for (i in chunks.indices) {
+            acc += chunks[i].length
+            if (acc >= charsBefore) return i
         }
-        val ratio = if (currentTotal <= 1) 0f
-                    else (currentPage - 1).toFloat() / maxY.toFloat()
-        return (chunks.size * ratio.coerceIn(0f, 1f)).toInt().coerceIn(0, chunks.lastIndex)
+        return chunks.lastIndex
     }
 
     private fun startSpeakingHere(chapterIdx: Int, startChunk: Int) {
@@ -1144,17 +1147,23 @@ class ReaderActivity : AppCompatActivity() {
                 if(window.__lisbLh==null)lisbInit();
                 if(window.__lisbLines==null)lisbBuildLines();
                 var lines=window.__lisbLines||[];
-                var vh=window.innerHeight;
+                var lh=window.__lisbLh||30;
+                // Subtract one full line-height as safety margin from the
+                // usable viewport. This ensures the last line on every page
+                // is fully visible even with descenders, fractional-px
+                // rounding on HarmonyOS/MIUI, and any device-specific
+                // viewport discrepancy. The trade-off is one fewer line per
+                // page — negligible on modern screens (40+ lines).
+                var vh=window.innerHeight-lh;
+                if(vh<lh*3)vh=window.innerHeight; // fallback for tiny screens
                 var maxY=lisbMaxY();
                 var pages=[0];
                 if(maxY<=0){window.__lisbPages=pages;return;}
                 var py=0,guard=0;
                 while(guard++<99999){
-                  // A line fits on the current page (starting at py) iff its
-                  // BOTTOM <= py + vh. Find the first line that does NOT fit.
                   var next=-1;
                   for(var i=0;i<lines.length;i++){
-                    if(lines[i].t<=py)continue; // already on this or earlier page
+                    if(lines[i].t<=py)continue;
                     if(lines[i].b>py+vh){
                       next=lines[i].t;
                       break;

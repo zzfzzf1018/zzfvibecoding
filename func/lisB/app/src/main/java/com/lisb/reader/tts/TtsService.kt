@@ -218,6 +218,16 @@ class TtsService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
+        // Tap the notification to return to the reader.
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val contentPi = if (launchIntent != null) {
+            PendingIntent.getActivity(
+                this, 0, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else null
         val prev = NotificationCompat.Action(
             android.R.drawable.ic_media_previous, "上一章", pi(ACTION_PREV)
         )
@@ -237,6 +247,7 @@ class TtsService : Service() {
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(bookTitle.ifEmpty { "正在朗读" })
             .setContentText(chapterTitle)
+            .setContentIntent(contentPi)
             .setSubText(if (chapters.isNotEmpty()) "${currentChapter + 1} / ${chapters.size}" else null)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
