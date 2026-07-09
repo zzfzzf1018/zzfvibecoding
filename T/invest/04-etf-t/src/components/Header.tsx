@@ -1,12 +1,14 @@
 import { Search, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
+import { DataSourceSelector } from './DataSourceSelector';
 
 interface HeaderProps {
   onSearch: (keyword: string) => void;
   keyword: string;
+  onDataSourceChange: () => void;
 }
 
-export const Header = ({ onSearch, keyword }: HeaderProps) => {
+export const Header = ({ onSearch, keyword, onDataSourceChange }: HeaderProps) => {
   const [inputValue, setInputValue] = useState(keyword);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -41,10 +43,13 @@ export const Header = ({ onSearch, keyword }: HeaderProps) => {
             </div>
           </form>
 
-          <div className="hidden sm:block text-sm text-primary-200">
-            <span className="inline-flex items-center px-2 py-1 rounded-full bg-up/10 text-up text-xs font-medium">
-              实时数据
-            </span>
+          <div className="flex items-center space-x-4">
+            <DataSourceSelector onDataSourceChange={onDataSourceChange} />
+            <div className="hidden sm:block text-sm text-primary-200">
+              <span className="inline-flex items-center px-2 py-1 rounded-full bg-up/10 text-up text-xs font-medium">
+                实时数据
+              </span>
+            </div>
           </div>
         </div>
       </div>

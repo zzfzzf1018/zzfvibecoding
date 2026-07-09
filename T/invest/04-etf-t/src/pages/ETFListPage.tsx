@@ -23,9 +23,15 @@ export const ETFListPage = () => {
     setSelectedCategory(category);
   };
 
+  const handleDataSourceChange = () => {
+    setSelectedCategory(undefined);
+    setSearchKeyword('');
+    fetchETFList(undefined, '');
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50">
-      <Header onSearch={handleSearch} keyword={searchKeyword} />
+      <Header onSearch={handleSearch} keyword={searchKeyword} onDataSourceChange={handleDataSourceChange} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">

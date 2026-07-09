@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-07-09
+
+### Added
+
+- 实现多数据源架构，支持模拟数据、新浪财经、东方财富三种数据源
+- 创建数据源抽象接口 (DataSource) 和本地缓存模块 (LocalCache)
+- 实现新浪财经数据源 (SinaDataSource)，包含20只ETF数据
+- 实现东方财富数据源 (EastMoneyDataSource)，包含25只ETF数据
+- 创建数据源切换组件 (DataSourceSelector)，支持在头部切换数据源
+- 实现查询数据的本地缓存功能，缓存时间30分钟
+- 支持手动刷新缓存功能
+- 数据源选择状态持久化到localStorage
+
+### Changed
+
+- 更新ETF API层，支持多数据源切换
+- 更新Header组件，添加数据源选择器
+- 更新MockDataSource，添加缓存支持
+- 更新README.md，添加数据源说明
+
 ## [1.0.0] - 2026-07-09
 
 ### Added
@@ -47,7 +67,6 @@ All notable changes to this project will be documented in this file.
 
 ### Planned
 
-- 接入真实数据源
 - 添加用户收藏功能
 - 添加ETF对比功能
-- 添加更多ETF数据
+- 接入更多真实数据源
