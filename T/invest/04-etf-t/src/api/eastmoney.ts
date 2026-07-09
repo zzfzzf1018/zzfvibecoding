@@ -91,6 +91,28 @@ export class EastMoneyDataSource implements DataSource {
     }
   }
 
+  private async fetchWithRetry(url: string, maxRetries: number = 3, delayMs: number = 1000): Promise<Response> {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://quote.eastmoney.com/',
+            'Accept': 'application/json, text/plain, */*',
+          },
+        });
+        if (response.ok) {
+          return response;
+        }
+      } catch {
+      }
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, i)));
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
   private async fetchAllPages(): Promise<Array<{
     code: string;
     name: string;
@@ -141,13 +163,7 @@ export class EastMoneyDataSource implements DataSource {
         _: String(Date.now()),
       });
 
-      const response = await fetch(`${url}?${params.toString()}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://quote.eastmoney.com/',
-        },
-      });
-
+      const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
       const data = await response.json();
 
       if (data && data.data) {
@@ -176,7 +192,7 @@ export class EastMoneyDataSource implements DataSource {
       }
 
       pageNum++;
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     return allData;

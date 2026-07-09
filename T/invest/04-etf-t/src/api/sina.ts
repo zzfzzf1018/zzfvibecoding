@@ -92,6 +92,26 @@ export class SinaDataSource implements DataSource {
     return detail;
   }
 
+  private async fetchWithRetry(url: string, maxRetries: number = 3, delayMs: number = 1000): Promise<Response> {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+        if (response.ok) {
+          return response;
+        }
+      } catch {
+      }
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, i)));
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
   private async fetchAllEtfCodes(): Promise<string[]> {
     const cacheKey = 'sina_all_etf_codes';
     const cached = LocalCache.get<string[]>(cacheKey);
@@ -114,13 +134,7 @@ export class SinaDataSource implements DataSource {
         _: String(Date.now()),
       });
 
-      const response = await fetch(`${url}?${params.toString()}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://quote.eastmoney.com/',
-        },
-      });
-
+      const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
       const data = await response.json();
 
       if (data && data.data && data.data.diff) {
@@ -148,18 +162,14 @@ export class SinaDataSource implements DataSource {
     }
 
     const allData: SinaETFData[] = [];
-    const batchSize = 50;
+    const batchSize = 30;
 
     for (let i = 0; i < etfCodes.length; i += batchSize) {
       const batch = etfCodes.slice(i, i + batchSize);
 
       try {
         const url = `/api/sina/list=${batch.join(',')}`;
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-        });
+        const response = await this.fetchWithRetry(url);
         const text = await response.text();
         const parsedData = this.parseSinaData(text);
         allData.push(...parsedData);
@@ -167,7 +177,7 @@ export class SinaDataSource implements DataSource {
       }
 
       if (i + batchSize < etfCodes.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     }
 
