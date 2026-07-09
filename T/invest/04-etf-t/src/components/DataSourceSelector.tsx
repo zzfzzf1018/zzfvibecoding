@@ -1,4 +1,4 @@
-import { Database, RefreshCw } from 'lucide-react';
+import { Database, RefreshCw, Check } from 'lucide-react';
 import { useState } from 'react';
 import { getDataSource, setDataSource, getAvailableDataSources, clearCache } from '@/api/etf';
 import type { DataSourceType } from '@/api/datasources';
@@ -6,6 +6,12 @@ import type { DataSourceType } from '@/api/datasources';
 interface DataSourceSelectorProps {
   onDataSourceChange: () => void;
 }
+
+const sourceInfo: Record<DataSourceType, { isReal: boolean; description: string }> = {
+  mock: { isReal: false, description: '内置模拟数据' },
+  sina: { isReal: true, description: '新浪财经实时行情' },
+  eastmoney: { isReal: true, description: '东方财富基金数据' },
+};
 
 export const DataSourceSelector = ({ onDataSourceChange }: DataSourceSelectorProps) => {
   const [currentSource, setCurrentSource] = useState<DataSourceType>(getDataSource());
@@ -26,6 +32,7 @@ export const DataSourceSelector = ({ onDataSourceChange }: DataSourceSelectorPro
   };
 
   const currentSourceName = sources.find((s) => s.type === currentSource)?.name || '未知';
+  const currentSourceIsReal = sourceInfo[currentSource]?.isReal || false;
 
   return (
     <div className="relative">
@@ -35,6 +42,11 @@ export const DataSourceSelector = ({ onDataSourceChange }: DataSourceSelectorPro
       >
         <Database className="h-4 w-4" />
         <span className="text-sm font-medium">{currentSourceName}</span>
+        {currentSourceIsReal && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-xs">
+            <Check className="h-3 w-3" />
+          </span>
+        )}
         <svg
           className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`}
           fill="none"
@@ -46,21 +58,38 @@ export const DataSourceSelector = ({ onDataSourceChange }: DataSourceSelectorPro
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-neutral-100 py-2 z-50">
+        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-neutral-100 py-2 z-50">
           <div className="px-4 py-2 border-b border-neutral-100">
             <span className="text-xs font-medium text-neutral-500">选择数据源</span>
           </div>
-          {sources.map((source) => (
-            <button
-              key={source.type}
-              onClick={() => handleSelect(source.type)}
-              className={`w-full px-4 py-2 text-left text-sm hover:bg-neutral-50 transition-colors ${
-                currentSource === source.type ? 'bg-primary-50 text-primary-700 font-medium' : 'text-neutral-700'
-              }`}
-            >
-              {source.name}
-            </button>
-          ))}
+          {sources.map((source) => {
+            const info = sourceInfo[source.type];
+            return (
+              <button
+                key={source.type}
+                onClick={() => handleSelect(source.type)}
+                className={`w-full px-4 py-2 text-left hover:bg-neutral-50 transition-colors ${
+                  currentSource === source.type ? 'bg-primary-50' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm font-medium ${
+                    currentSource === source.type ? 'text-primary-700' : 'text-neutral-700'
+                  }`}>
+                    {source.name}
+                  </span>
+                  {info.isReal && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">
+                      真实
+                    </span>
+                  )}
+                </div>
+                <p className={`text-xs mt-0.5 ${currentSource === source.type ? 'text-primary-500' : 'text-neutral-400'}`}>
+                  {info.description}
+                </p>
+              </button>
+            );
+          })}
           <div className="border-t border-neutral-100 mt-2">
             <button
               onClick={handleRefresh}
