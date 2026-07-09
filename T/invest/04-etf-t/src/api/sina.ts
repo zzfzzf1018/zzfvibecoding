@@ -35,9 +35,10 @@ export class SinaDataSource implements DataSource {
       return cached;
     }
 
-    const etfs: ETF[] = [];
+    const allEtfCodes = await this.fetchAllEtfCodes();
+    const sinaData = await this.fetchSinaETFData(allEtfCodes);
 
-    const sinaData = await this.fetchSinaETFData();
+    const etfs: ETF[] = [];
 
     sinaData.forEach((item) => {
       const code = this.extractCode(item.symbol);
@@ -91,20 +92,86 @@ export class SinaDataSource implements DataSource {
     return detail;
   }
 
-  private async fetchSinaETFData(): Promise<SinaETFData[]> {
+  private async fetchAllEtfCodes(): Promise<string[]> {
+    const cacheKey = 'sina_all_etf_codes';
+    const cached = LocalCache.get<string[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     try {
-      const url = `/api/sina/list=${ETF_CODES.join(',')}`;
-      const response = await fetch(url, {
+      const url = '/api/eastmoney/api/qt/clist/get';
+      const params = new URLSearchParams({
+        fid: 'f3',
+        po: '1',
+        pz: '500',
+        pn: '1',
+        np: '1',
+        fltt: '2',
+        invt: '2',
+        fs: 'b:MK0021',
+        fields: 'f12',
+        _: String(Date.now()),
+      });
+
+      const response = await fetch(`${url}?${params.toString()}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://quote.eastmoney.com/',
         },
       });
-      const text = await response.text();
 
-      return this.parseSinaData(text);
+      const data = await response.json();
+
+      if (data && data.data && data.data.diff) {
+        const codes = data.data.diff.map((item: Record<string, unknown>) => {
+          const code = String(item.f12 || '');
+          if (code.startsWith('5')) {
+            return `sh${code}`;
+          }
+          return `sz${code}`;
+        }).filter(Boolean);
+        LocalCache.set(cacheKey, codes, 3600000);
+        return codes;
+      }
     } catch {
+    }
+
+    return ETF_CODES;
+  }
+
+  private async fetchSinaETFData(codes?: string[]): Promise<SinaETFData[]> {
+    const etfCodes = codes || ETF_CODES;
+
+    if (etfCodes.length === 0) {
       return this.getMockSinaData();
     }
+
+    const allData: SinaETFData[] = [];
+    const batchSize = 50;
+
+    for (let i = 0; i < etfCodes.length; i += batchSize) {
+      const batch = etfCodes.slice(i, i + batchSize);
+
+      try {
+        const url = `/api/sina/list=${batch.join(',')}`;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        });
+        const text = await response.text();
+        const parsedData = this.parseSinaData(text);
+        allData.push(...parsedData);
+      } catch {
+      }
+
+      if (i + batchSize < etfCodes.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    return allData.length > 0 ? allData : this.getMockSinaData();
   }
 
   private parseSinaData(text: string): SinaETFData[] {

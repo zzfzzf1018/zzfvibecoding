@@ -44,9 +44,10 @@ export class TencentDataSource implements DataSource {
       return cached;
     }
 
-    const etfs: ETF[] = [];
+    const allEtfCodes = await this.fetchAllEtfCodes();
+    const tencentData = await this.fetchTencentETFData(allEtfCodes);
 
-    const tencentData = await this.fetchTencentETFData();
+    const etfs: ETF[] = [];
 
     tencentData.forEach((item) => {
       const code = item.code;
@@ -100,21 +101,87 @@ export class TencentDataSource implements DataSource {
     return detail;
   }
 
-  private async fetchTencentETFData(): Promise<TencentETFData[]> {
+  private async fetchAllEtfCodes(): Promise<string[]> {
+    const cacheKey = 'tencent_all_etf_codes';
+    const cached = LocalCache.get<string[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     try {
-      const url = `/api/tencent/q=${ETF_CODES.join(',')}`;
-      const response = await fetch(url, {
+      const url = '/api/eastmoney/api/qt/clist/get';
+      const params = new URLSearchParams({
+        fid: 'f3',
+        po: '1',
+        pz: '500',
+        pn: '1',
+        np: '1',
+        fltt: '2',
+        invt: '2',
+        fs: 'b:MK0021',
+        fields: 'f12',
+        _: String(Date.now()),
+      });
+
+      const response = await fetch(`${url}?${params.toString()}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://quote.eastmoney.com/',
         },
       });
-      const arrayBuffer = await response.arrayBuffer();
-      const text = new TextDecoder('GBK').decode(arrayBuffer);
 
-      return this.parseTencentData(text);
+      const data = await response.json();
+
+      if (data && data.data && data.data.diff) {
+        const codes = data.data.diff.map((item: Record<string, unknown>) => {
+          const code = String(item.f12 || '');
+          if (code.startsWith('5')) {
+            return `sh${code}`;
+          }
+          return `sz${code}`;
+        }).filter(Boolean);
+        LocalCache.set(cacheKey, codes, 3600000);
+        return codes;
+      }
     } catch {
+    }
+
+    return ETF_CODES;
+  }
+
+  private async fetchTencentETFData(codes?: string[]): Promise<TencentETFData[]> {
+    const etfCodes = codes || ETF_CODES;
+
+    if (etfCodes.length === 0) {
       return this.getMockTencentData();
     }
+
+    const allData: TencentETFData[] = [];
+    const batchSize = 50;
+
+    for (let i = 0; i < etfCodes.length; i += batchSize) {
+      const batch = etfCodes.slice(i, i + batchSize);
+
+      try {
+        const url = `/api/tencent/q=${batch.join(',')}`;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        });
+        const arrayBuffer = await response.arrayBuffer();
+        const text = new TextDecoder('GBK').decode(arrayBuffer);
+        const parsedData = this.parseTencentData(text);
+        allData.push(...parsedData);
+      } catch {
+      }
+
+      if (i + batchSize < etfCodes.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    return allData.length > 0 ? allData : this.getMockTencentData();
   }
 
   private parseTencentData(text: string): TencentETFData[] {
