@@ -10,6 +10,7 @@ import type { DataSource, DataSourceType } from './datasources';
 import { LocalCache } from './datasources';
 import { SinaDataSource } from './sina';
 import { EastMoneyDataSource } from './eastmoney';
+import { TencentDataSource } from './tencent';
 
 const detailMap: Record<string, ETFDetailResponse> = {
   '510050': detail510050,
@@ -77,6 +78,7 @@ const dataSources: Record<DataSourceType, DataSource> = {
   mock: new MockDataSource(),
   sina: new SinaDataSource(),
   eastmoney: new EastMoneyDataSource(),
+  tencent: new TencentDataSource(),
 };
 
 let currentDataSource: DataSourceType = 'mock';

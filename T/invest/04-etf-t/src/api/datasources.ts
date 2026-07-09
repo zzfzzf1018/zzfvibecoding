@@ -1,6 +1,6 @@
 import type { ETF, ETFDetailResponse, ETFCategory } from '@/types';
 
-export type DataSourceType = 'mock' | 'sina' | 'eastmoney';
+export type DataSourceType = 'mock' | 'sina' | 'eastmoney' | 'tencent';
 
 export interface DataSource {
   type: DataSourceType;

@@ -26,6 +26,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/eastmoney-fund/, ''),
       },
+      '/api/tencent': {
+        target: 'https://qt.gtimg.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tencent/, ''),
+      },
     },
   },
 })
