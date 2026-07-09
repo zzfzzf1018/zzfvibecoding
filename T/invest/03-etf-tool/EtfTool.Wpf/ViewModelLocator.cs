@@ -11,6 +11,8 @@ namespace EtfTool.Wpf
         private readonly ICacheManager _cacheManager;
         private readonly EtfDataProviderFactory _providerFactory;
         private readonly EtfService _etfService;
+        private ViewModels.MainViewModel? _mainViewModel;
+        private ViewModels.EtfDetailViewModel? _etfDetailViewModel;
 
         public ViewModelLocator()
         {
@@ -19,9 +21,9 @@ namespace EtfTool.Wpf
             _etfService = new EtfService(_providerFactory, _cacheManager);
         }
 
-        public ViewModels.MainViewModel MainViewModel => new(_etfService);
+        public ViewModels.MainViewModel MainViewModel => _mainViewModel ??= new(_etfService);
 
-        public ViewModels.EtfDetailViewModel EtfDetailViewModel => new(_etfService);
+        public ViewModels.EtfDetailViewModel EtfDetailViewModel => _etfDetailViewModel ??= new(_etfService);
 
         public static void Cleanup()
         {

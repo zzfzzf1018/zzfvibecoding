@@ -7,14 +7,14 @@ DATA_SOURCE_CONFIG = {
         'description': '东方财富数据源，数据全面，更新及时',
         'stock_search_cn': 'stock_info_a_code_name',
         'stock_search_hk': 'stock_hk_spot_em',
-        'finance_report_cn_balance': 'stock_financial_analysis_indicator',
-        'finance_report_cn_income': 'stock_financial_report_sina',
-        'finance_report_cn_cash': 'stock_financial_report_sina',
-        'finance_report_hk': 'stock_hk_financial_report',
-        'stock_analysis_cn': 'stock_zh_a_indicator',
-        'stock_analysis_hk': 'stock_hk_indicator',
-        'prospectus_cn': 'stock_new_stock_em',
-        'prospectus_hk': 'stock_hk_new_stock',
+        'finance_report_cn_balance': 'stock_balance_sheet_by_report_em',
+        'finance_report_cn_income': 'stock_profit_sheet_by_report_em',
+        'finance_report_cn_cash': 'stock_cash_flow_sheet_by_report_em',
+        'finance_report_hk': 'stock_financial_hk_report_em',
+        'stock_analysis_cn': 'stock_financial_analysis_indicator_em',
+        'stock_analysis_hk': 'stock_hk_financial_indicator_em',
+        'prospectus_cn': 'stock_ipo_info',
+        'prospectus_hk': 'stock_ipo_hk_ths',
     },
     'sina': {
         'name': '新浪财经',
@@ -24,25 +24,25 @@ DATA_SOURCE_CONFIG = {
         'finance_report_cn_balance': 'stock_financial_report_sina',
         'finance_report_cn_income': 'stock_financial_report_sina',
         'finance_report_cn_cash': 'stock_financial_report_sina',
-        'finance_report_hk': 'stock_hk_financial_report',
-        'stock_analysis_cn': 'stock_zh_a_indicator',
-        'stock_analysis_hk': 'stock_hk_indicator',
-        'prospectus_cn': 'stock_new_stock_em',
-        'prospectus_hk': 'stock_hk_new_stock',
+        'finance_report_hk': 'stock_financial_hk_report_em',
+        'stock_analysis_cn': 'stock_financial_analysis_indicator',
+        'stock_analysis_hk': 'stock_hk_financial_indicator_em',
+        'prospectus_cn': 'stock_ipo_info',
+        'prospectus_hk': 'stock_ipo_hk_ths',
     },
     'tencent': {
         'name': '腾讯财经',
         'description': '腾讯财经数据源，数据准确，覆盖面广',
         'stock_search_cn': 'stock_info_a_code_name',
-        'stock_search_hk': 'stock_hk_spot_tencent',
-        'finance_report_cn_balance': 'stock_financial_analysis_indicator',
-        'finance_report_cn_income': 'stock_financial_report_sina',
-        'finance_report_cn_cash': 'stock_financial_report_sina',
-        'finance_report_hk': 'stock_hk_financial_report',
-        'stock_analysis_cn': 'stock_zh_a_indicator',
-        'stock_analysis_hk': 'stock_hk_indicator',
-        'prospectus_cn': 'stock_new_stock_em',
-        'prospectus_hk': 'stock_hk_new_stock',
+        'stock_search_hk': 'stock_hk_spot',
+        'finance_report_cn_balance': 'stock_balance_sheet_by_report_em',
+        'finance_report_cn_income': 'stock_profit_sheet_by_report_em',
+        'finance_report_cn_cash': 'stock_cash_flow_sheet_by_report_em',
+        'finance_report_hk': 'stock_financial_hk_report_em',
+        'stock_analysis_cn': 'stock_financial_analysis_indicator_em',
+        'stock_analysis_hk': 'stock_hk_financial_indicator_em',
+        'prospectus_cn': 'stock_ipo_info',
+        'prospectus_hk': 'stock_ipo_hk_ths',
     },
 }
 
@@ -126,28 +126,28 @@ class DataSourceFactory:
     
     def get_stock_analysis_cn(self):
         config = get_data_source_config()
-        func_name = config.get('stock_analysis_cn', 'stock_zh_a_indicator')
+        func_name = config.get('stock_analysis_cn', 'stock_financial_analysis_indicator_em')
         if self.ak and hasattr(self.ak, func_name):
             return getattr(self.ak, func_name)
         return None
     
     def get_stock_analysis_hk(self):
         config = get_data_source_config()
-        func_name = config.get('stock_analysis_hk', 'stock_hk_indicator')
+        func_name = config.get('stock_analysis_hk', 'stock_hk_financial_indicator_em')
         if self.ak and hasattr(self.ak, func_name):
             return getattr(self.ak, func_name)
         return None
     
     def get_prospectus_cn(self):
         config = get_data_source_config()
-        func_name = config.get('prospectus_cn', 'stock_new_stock_em')
+        func_name = config.get('prospectus_cn', 'stock_ipo_info')
         if self.ak and hasattr(self.ak, func_name):
             return getattr(self.ak, func_name)
         return None
     
     def get_prospectus_hk(self):
         config = get_data_source_config()
-        func_name = config.get('prospectus_hk', 'stock_hk_new_stock')
+        func_name = config.get('prospectus_hk', 'stock_ipo_hk_ths')
         if self.ak and hasattr(self.ak, func_name):
             return getattr(self.ak, func_name)
         return None

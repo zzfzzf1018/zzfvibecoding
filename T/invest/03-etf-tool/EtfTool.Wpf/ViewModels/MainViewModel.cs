@@ -1,5 +1,6 @@
 
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using EtfTool.Core.Enums;
 using EtfTool.Core.Models;
@@ -16,6 +17,7 @@ namespace EtfTool.Wpf.ViewModels
         private bool _isLoading;
         private string _selectedEtfCode = string.Empty;
         private DataSource _selectedDataSource;
+        private string _errorMessage = string.Empty;
 
         public string SearchKeyword
         {
@@ -47,6 +49,12 @@ namespace EtfTool.Wpf.ViewModels
             }
         }
 
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => Set(ref _errorMessage, value);
+        }
+
         public ObservableCollection<EtfInfo> SearchResults { get; } = new();
         public ObservableCollection<DataSource> AvailableDataSources { get; } = new();
 
@@ -63,23 +71,46 @@ namespace EtfTool.Wpf.ViewModels
 
             SearchCommand = new RelayCommand(SearchEtfAsync);
             ClearCacheCommand = new RelayCommand(() => _etfService.ClearCache());
+            
+            LogInfo($"MainViewModel created, EtfService: {etfService.GetHashCode()}, SearchCommand: {SearchCommand != null}");
         }
 
         private async void SearchEtfAsync()
         {
             if (string.IsNullOrWhiteSpace(SearchKeyword))
+            {
+                ErrorMessage = "请输入搜索关键词";
+                LogError("Search failed: keyword is empty");
                 return;
+            }
 
             IsLoading = true;
+            ErrorMessage = string.Empty;
             SearchResults.Clear();
 
             try
             {
+                LogInfo($"Searching ETF: {SearchKeyword}, DataSource: {SelectedDataSource}");
                 var results = await _etfService.SearchEtfAsync(SearchKeyword);
-                foreach (var etf in results)
+                
+                if (results == null || results.Count == 0)
                 {
-                    SearchResults.Add(etf);
+                    ErrorMessage = "未找到匹配的ETF，请尝试其他关键词";
+                    LogInfo($"No results found for: {SearchKeyword}");
                 }
+                else
+                {
+                    foreach (var etf in results)
+                    {
+                        SearchResults.Add(etf);
+                    }
+                    LogInfo($"Found {results.Count} ETFs for: {SearchKeyword}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"搜索失败: {ex.Message}";
+                LogError($"Search failed for '{SearchKeyword}': {ex.Message}\n{ex.StackTrace}");
             }
             finally
             {
@@ -90,6 +121,32 @@ namespace EtfTool.Wpf.ViewModels
         public async Task LoadEtfDetailAsync(string etfCode)
         {
             SelectedEtfCode = etfCode;
+        }
+
+        private void LogInfo(string message)
+        {
+            WriteLog($"INFO: {DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}");
+        }
+
+        private void LogError(string message)
+        {
+            WriteLog($"ERROR: {DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}");
+        }
+
+        private void WriteLog(string message)
+        {
+            try
+            {
+                var logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                if (!Directory.Exists(logDir))
+                    Directory.CreateDirectory(logDir);
+
+                var logFile = Path.Combine(logDir, $"etftool_{DateTime.Now:yyyyMMdd}.log");
+                File.AppendAllText(logFile, message + Environment.NewLine);
+            }
+            catch
+            {
+            }
         }
     }
 }

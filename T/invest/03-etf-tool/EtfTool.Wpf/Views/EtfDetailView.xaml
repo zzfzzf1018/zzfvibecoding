@@ -42,7 +42,19 @@
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding !IsLoading}">
                 <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconMaterial Kind="Refresh" Width="16" Height="16" />
+                    <Rectangle Width="16" Height="16">
+                        <Rectangle.Fill>
+                            <DrawingBrush>
+                                <DrawingBrush.Drawing>
+                                    <GeometryDrawing Brush="{DynamicResource MahApps.Brushes.ThemeForeground}">
+                                        <GeometryDrawing.Geometry>
+                                            <PathGeometry Figures="M8,1 A7,7 0 0,1 15,8 L13,8 A5,5 0 0,0 8,3 A5,5 0 0,0 3,8 L1,8 A7,7 0 0,1 8,1" />
+                                        </GeometryDrawing.Geometry>
+                                    </GeometryDrawing>
+                                </DrawingBrush.Drawing>
+                            </DrawingBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
                     <TextBlock Text="刷新" Margin="5,0,0,0" />
                 </StackPanel>
             </Button>

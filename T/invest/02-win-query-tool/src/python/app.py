@@ -22,10 +22,12 @@ akshare_available = data_source_factory.is_available()
 from cache import set_cache, get_cache, clear_cache, clear_expired_cache, get_cache_stats
 
 def retry_with_backoff(func, max_retries=2, delay=1):
+    last_exception = None
     for i in range(max_retries):
         try:
             return func()
         except Exception as e:
+            last_exception = e
             if i == max_retries - 1:
                 print(f"Final retry {i+1}/{max_retries} failed: {e}", file=sys.stderr)
                 return None
@@ -183,207 +185,272 @@ def search_stock():
         
         return jsonify({'success': False, 'error': error_msg})
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+}
+
+def fetch_eastmoney_stock_data(code, exchange='SH'):
+    secid = f"1.{code}" if exchange == 'SH' else f"0.{code}"
+    url = f"http://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f57,f58,f100,f101,f103,f104,f105,f106,f107,f108,f109,f116,f117,f118,f119,f120,f121,f122,f123,f124,f125,f126,f127,f128,f129,f130,f131,f132,f133,f134,f135,f136,f137,f138,f139,f140,f141,f142,f143,f144,f145,f146,f147,f148,f149,f150,f151,f152,f153,f154,f155,f156,f157,f158,f159,f160,f161"
+    try:
+        response = requests.get(url, timeout=30, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Eastmoney API error: {e}", file=sys.stderr)
+        return None
+
+def fetch_eastmoney_finance(code, exchange='SH', report_type='balance'):
+    secid = f"1.{code}" if exchange == 'SH' else f"0.{code}"
+    type_map = {
+        'balance': 'F1003',
+        'income': 'F1004', 
+        'cash': 'F1005'
+    }
+    report_type_code = type_map.get(report_type, 'F1003')
+    
+    url = f"http://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields={report_type_code}"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Eastmoney finance API error: {e}", file=sys.stderr)
+        return None
+
 @app.route('/api/stock/finance_report', methods=['GET'])
 def get_finance_report():
     symbol = request.args.get('symbol', '')
     report_type = request.args.get('type', 'balance')
     
-    if not akshare_available:
-        return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
-    
     cache_params = {'symbol': symbol, 'type': report_type, 'source': get_current_data_source()}
     cached_data = get_cache('finance_report', cache_params)
     
     try:
-        if symbol.endswith('.SH') or symbol.endswith('.SZ'):
+        if symbol.endswith('.SH'):
             code = symbol[:-3]
-            
-            finance_report_func = data_source_factory.get_finance_report_cn(report_type)
-            if finance_report_func:
-                if report_type == 'balance':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
-                elif report_type == 'income':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='income'))
-                elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='cash'))
-                else:
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
-            
-            else:
-                if report_type == 'balance':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
-                elif report_type == 'income':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
-                elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
-                else:
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
-            
-            if df is not None and not df.empty:
-                df = df.dropna(axis=1, how='all')
-                df = df.replace({np.nan: None})
-                
-                columns = df.columns.tolist()
-                data = df.values.tolist()
-                
-                result = {'columns': columns, 'data': data}
-                set_cache('finance_report', cache_params, result)
-                return jsonify({'success': True, **result, 'cached': False})
-        
+            exchange = 'SH'
+        elif symbol.endswith('.SZ'):
+            code = symbol[:-3]
+            exchange = 'SZ'
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
+            exchange = 'HK'
+        else:
+            return jsonify({'success': False, 'error': '无效的股票代码格式'})
+        
+        eastmoney_data = fetch_eastmoney_stock_data(code, exchange)
+        if eastmoney_data and eastmoney_data.get('rc') == 0:
+            data = eastmoney_data.get('data', {})
             
-            finance_report_func = data_source_factory.get_finance_report_hk()
-            if finance_report_func:
+            report_data = []
+            if report_type == 'balance':
+                report_data = [
+                    {'指标': '总股本(万股)', '数值': data.get('f103', '')},
+                    {'指标': '流通股本(万股)', '数值': data.get('f104', '')},
+                    {'指标': '净资产(万元)', '数值': data.get('f105', '')},
+                    {'指标': '每股收益(元)', '数值': data.get('f108', '')},
+                    {'指标': '每股净资产(元)', '数值': data.get('f160', '')},
+                    {'指标': '市净率', '数值': data.get('f109', '')},
+                    {'指标': '总市值(元)', '数值': data.get('f116', '')},
+                    {'指标': '流通市值(元)', '数值': data.get('f117', '')},
+                ]
+            elif report_type == 'income':
+                report_data = [
+                    {'指标': '每股收益(元)', '数值': data.get('f108', '')},
+                    {'指标': '市盈率', '数值': data.get('f107', '')},
+                    {'指标': '市净率', '数值': data.get('f109', '')},
+                    {'指标': '总市值(元)', '数值': data.get('f116', '')},
+                    {'指标': '流通市值(元)', '数值': data.get('f117', '')},
+                    {'指标': '换手率', '数值': data.get('f118', '')},
+                ]
+            elif report_type == 'cash':
+                report_data = [
+                    {'指标': '总股本(万股)', '数值': data.get('f103', '')},
+                    {'指标': '流通股本(万股)', '数值': data.get('f104', '')},
+                    {'指标': '总市值(元)', '数值': data.get('f116', '')},
+                    {'指标': '流通市值(元)', '数值': data.get('f117', '')},
+                ]
+            
+            df = pd.DataFrame(report_data)
+            if not df.empty:
+                df = df.dropna(axis=1, how='all')
+                df = df.replace({np.nan: None})
+                
+                columns = df.columns.tolist()
+                data_values = df.values.tolist()
+                
+                result = {'columns': columns, 'data': data_values}
+                set_cache('finance_report', cache_params, result)
+                return jsonify({'success': True, **result, 'cached': False})
+        
+        if akshare_available:
+            df = None
+            code = symbol[:-3]
+            
+            if symbol.endswith('.SH') or symbol.endswith('.SZ'):
+                apis_to_try = []
+                stock_code = f"sh{code}" if symbol.endswith('.SH') else f"sz{code}"
+                
                 if report_type == 'balance':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
+                    apis_to_try = [
+                        lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='资产负债表'),
+                    ]
                 elif report_type == 'income':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='综合收益表'))
+                    apis_to_try = [
+                        lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='利润表'),
+                    ]
                 elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='现金流量表'))
-                else:
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
-            else:
-                if report_type == 'balance':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
-                elif report_type == 'income':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
-                elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
-                else:
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                    apis_to_try = [
+                        lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='现金流量表'),
+                    ]
+                
+                for api_func in apis_to_try:
+                    try:
+                        df = retry_with_backoff(api_func)
+                        if df is not None and not df.empty:
+                            break
+                    except Exception as e:
+                        print(f"akshare API failed: {e}", file=sys.stderr)
             
             if df is not None and not df.empty:
                 df = df.dropna(axis=1, how='all')
                 df = df.replace({np.nan: None})
                 
                 columns = df.columns.tolist()
-                data = df.values.tolist()
+                data_values = df.values.tolist()
                 
-                result = {'columns': columns, 'data': data}
+                result = {'columns': columns, 'data': data_values}
                 set_cache('finance_report', cache_params, result)
                 return jsonify({'success': True, **result, 'cached': False})
         
-        else:
-            return jsonify({'success': False, 'error': 'Invalid symbol format'})
-        
         if cached_data:
-            return jsonify({'success': True, **cached_data, 'cached': True})
+            return jsonify({'success': True, **cached_data, 'cached': True, 'warning': '当前数据源无数据，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': '未获取到财务数据'})
+        return jsonify({'success': False, 'error': '未获取到财务数据，请检查股票代码是否正确'})
     
     except Exception as e:
-        error_msg = f'网络请求失败: {str(e)}'
         print(f"Finance report error: {e}", file=sys.stderr)
         
         if cached_data:
             return jsonify({'success': True, **cached_data, 'cached': True, 'warning': '网络异常，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': error_msg})
+        return jsonify({'success': False, 'error': '网络请求失败，请检查网络连接或稍后重试'})
 
 @app.route('/api/stock/analysis', methods=['GET'])
 def get_stock_analysis():
     symbol = request.args.get('symbol', '')
     
-    if not akshare_available:
-        return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
+    print(f"DEBUG: analysis called with symbol={symbol}", file=sys.stderr)
     
     cache_params = {'symbol': symbol, 'source': get_current_data_source()}
     cached_data = get_cache('stock_analysis', cache_params)
     
     try:
-        if symbol.endswith('.SH') or symbol.endswith('.SZ'):
-            code = symbol[:-3]
-            
-            analysis_func = data_source_factory.get_stock_analysis_cn()
-            if analysis_func:
-                stock_zh_a_indicator_df = retry_with_backoff(lambda: analysis_func(symbol=f"{code}.SH"))
-            else:
-                stock_zh_a_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_zh_a_indicator(symbol=f"{code}.SH"))
-            
-            stock_financial_analysis_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
-            
-            pe = stock_zh_a_indicator_df.get('市盈率', np.nan)
-            pb = stock_zh_a_indicator_df.get('市净率', np.nan)
-            ps = stock_zh_a_indicator_df.get('市销率', np.nan)
-            dv = stock_zh_a_indicator_df.get('股息率', np.nan)
-            
-            if isinstance(pe, pd.Series):
-                pe = pe.iloc[0] if len(pe) > 0 else np.nan
-            if isinstance(pb, pd.Series):
-                pb = pb.iloc[0] if len(pb) > 0 else np.nan
-            if isinstance(ps, pd.Series):
-                ps = ps.iloc[0] if len(ps) > 0 else np.nan
-            if isinstance(dv, pd.Series):
-                dv = dv.iloc[0] if len(dv) > 0 else np.nan
-            
-            analysis_data = {
-                'valuation': {
-                    'pe': round(float(pe), 2) if not np.isnan(pe) else None,
-                    'pb': round(float(pb), 2) if not np.isnan(pb) else None,
-                    'ps': round(float(ps), 2) if not np.isnan(ps) else None,
-                    'dividend_yield': round(float(dv), 2) if not np.isnan(dv) else None
-                },
-                'financial_ratios': {}
-            }
-            
-            if stock_financial_analysis_indicator_df is not None and not stock_financial_analysis_indicator_df.empty:
-                for col in stock_financial_analysis_indicator_df.columns[:20]:
-                    val = stock_financial_analysis_indicator_df[col].iloc[0] if len(stock_financial_analysis_indicator_df) > 0 else np.nan
-                    if not np.isnan(val):
-                        analysis_data['financial_ratios'][col] = round(float(val), 2)
-            
-            if analysis_data['valuation']['pe'] is not None or analysis_data['financial_ratios']:
-                set_cache('stock_analysis', cache_params, analysis_data)
-                return jsonify({'success': True, 'data': analysis_data, 'cached': False})
+        analysis_data = {
+            'valuation': {
+                'pe': None,
+                'pb': None,
+                'ps': None,
+                'dividend_yield': None
+            },
+            'financial_ratios': {}
+        }
         
+        if symbol.endswith('.SH'):
+            code = symbol[:-3]
+            exchange = 'SH'
+        elif symbol.endswith('.SZ'):
+            code = symbol[:-3]
+            exchange = 'SZ'
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
+            exchange = 'HK'
+        else:
+            return jsonify({'success': False, 'error': '无效的股票代码格式'})
+        
+        eastmoney_data = fetch_eastmoney_stock_data(code, exchange)
+        if eastmoney_data and eastmoney_data.get('rc') == 0:
+            data = eastmoney_data.get('data', {})
             
-            hk_analysis_func = data_source_factory.get_stock_analysis_hk()
-            if hk_analysis_func:
-                stock_hk_indicator_df = retry_with_backoff(lambda: hk_analysis_func(symbol=f"{code}.HK"))
-            else:
-                stock_hk_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_indicator(symbol=f"{code}.HK"))
+            pe = data.get('f107')
+            pb = data.get('f109')
+            eps = data.get('f108')
+            nav = data.get('f160')
             
-            pe = stock_hk_indicator_df.get('市盈率', np.nan)
-            pb = stock_hk_indicator_df.get('市净率', np.nan)
-            
-            if isinstance(pe, pd.Series):
-                pe = pe.iloc[0] if len(pe) > 0 else np.nan
-            if isinstance(pb, pd.Series):
-                pb = pb.iloc[0] if len(pb) > 0 else np.nan
-            
-            analysis_data = {
-                'valuation': {
-                    'pe': round(float(pe), 2) if not np.isnan(pe) else None,
-                    'pb': round(float(pb), 2) if not np.isnan(pb) else None,
-                    'ps': None,
-                    'dividend_yield': None
-                },
-                'financial_ratios': {}
+            analysis_data['valuation'] = {
+                'pe': round(float(pe), 2) if pe else None,
+                'pb': round(float(pb), 2) if pb else None,
+                'ps': None,
+                'dividend_yield': None
             }
             
-            if analysis_data['valuation']['pe'] is not None:
+            analysis_data['financial_ratios'] = {
+                '每股收益': round(float(eps), 4) if eps else None,
+                '每股净资产': round(float(nav), 4) if nav else None,
+                '总股本(万股)': data.get('f103'),
+                '流通股本(万股)': data.get('f104'),
+                '总市值(元)': data.get('f116'),
+                '流通市值(元)': data.get('f117'),
+            }
+            
+            has_data = analysis_data['valuation']['pe'] is not None or \
+                       analysis_data['valuation']['pb'] is not None or \
+                       any(v is not None for v in analysis_data['financial_ratios'].values())
+            
+            if has_data:
                 set_cache('stock_analysis', cache_params, analysis_data)
                 return jsonify({'success': True, 'data': analysis_data, 'cached': False})
         
-        else:
-            return jsonify({'success': False, 'error': 'Invalid symbol format'})
+        if akshare_available and symbol.endswith('.SH') or symbol.endswith('.SZ'):
+            code = symbol[:-3]
+            stock_code = f"sh{code}" if symbol.endswith('.SH') else f"sz{code}"
+            
+            try:
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='资产负债表'))
+                if df is not None and not df.empty:
+                    analysis_data['financial_ratios']['货币资金'] = df.get('货币资金', [None])[0] if len(df) > 0 else None
+                    
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='利润表'))
+                if df is not None and not df.empty:
+                    analysis_data['financial_ratios']['营业收入'] = df.get('营业收入', [None])[0] if len(df) > 0 else None
+                    analysis_data['financial_ratios']['净利润'] = df.get('净利润', [None])[0] if len(df) > 0 else None
+            except Exception as e:
+                print(f"akshare analysis API failed: {e}", file=sys.stderr)
+        
+        if symbol.endswith('.HK') and akshare_available:
+            code = symbol[:-3]
+            
+            try:
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_hk_analysis_indicator_em(symbol=code))
+                if df is not None and not df.empty:
+                    if len(df) > 0:
+                        analysis_data['financial_ratios']['SECURITY_NAME_ABBR'] = df.iloc[0].get('SECURITY_NAME_ABBR')
+                        analysis_data['financial_ratios']['CURRENCY'] = df.iloc[0].get('CURRENCY')
+            except Exception as e:
+                print(f"HK Analysis API failed: {e}", file=sys.stderr)
         
         if cached_data:
-            return jsonify({'success': True, 'data': cached_data, 'cached': True})
+            return jsonify({'success': True, 'data': cached_data, 'cached': True, 'warning': '当前数据源无数据，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': '未获取到分析数据'})
+        return jsonify({'success': False, 'error': '未获取到分析数据，请检查股票代码是否正确'})
     
     except Exception as e:
-        error_msg = f'网络请求失败: {str(e)}'
+        import traceback
+        import sys
         print(f"Stock analysis error: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        line_num = exc_tb.tb_lineno
         
         if cached_data:
             return jsonify({'success': True, 'data': cached_data, 'cached': True, 'warning': '网络异常，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': error_msg})
+        return jsonify({'success': False, 'error': f'网络请求失败: {str(e)} (文件: {fname}, 行号: {line_num})'})
 
 @app.route('/api/stock/download_report', methods=['GET'])
 def download_report():
@@ -399,25 +466,16 @@ def download_report():
         if symbol.endswith('.SH') or symbol.endswith('.SZ'):
             code = symbol[:-3]
             
-            finance_report_func = data_source_factory.get_finance_report_cn(report_type)
-            if finance_report_func:
-                if report_type == 'balance':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
-                elif report_type == 'income':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='income'))
-                elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='cash'))
-                else:
-                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
+            stock_code = f"sh{code}" if symbol.endswith('.SH') else f"sz{code}"
+            
+            if report_type == 'balance':
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='资产负债表'))
+            elif report_type == 'income':
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='利润表'))
+            elif report_type == 'cash':
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='现金流量表'))
             else:
-                if report_type == 'balance':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
-                elif report_type == 'income':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
-                elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
-                else:
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='资产负债表'))
         
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
@@ -434,13 +492,13 @@ def download_report():
                     df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
             else:
                 if report_type == 'balance':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_hk_report_em(symbol=f"{code}.HK"))
                 elif report_type == 'income':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_hk_report_em(symbol=f"{code}.HK"))
                 elif report_type == 'cash':
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_hk_report_em(symbol=f"{code}.HK"))
                 else:
-                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_hk_report_em(symbol=f"{code}.HK"))
         
         else:
             return jsonify({'success': False, 'error': 'Invalid symbol format'})
@@ -472,108 +530,93 @@ def get_prospectus():
     cached_data = get_cache('prospectus', cache_params)
     
     try:
-        if symbol.endswith('.SH') or symbol.endswith('.SZ'):
-            code = symbol[:-3]
-            
-            prospectus_func = data_source_factory.get_prospectus_cn()
-            if prospectus_func:
-                prospectus_data = retry_with_backoff(lambda: prospectus_func())
-            else:
-                prospectus_data = retry_with_backoff(lambda: data_source_factory.ak.stock_new_stock_em())
-            
-            prospectus_data = prospectus_data[prospectus_data['申购代码'].astype(str).str.contains(code) | 
-                                              prospectus_data['证券简称'].str.contains(code)]
-            
-            results = []
-            for _, row in prospectus_data.head(10).iterrows():
-                results.append({
-                    'code': str(row['申购代码']),
-                    'name': row['证券简称'],
-                    'ipo_date': row.get('上网发行日期', ''),
-                    'prospectus_url': row.get('招股书链接', '')
-                })
-            
-            if results:
-                set_cache('prospectus', cache_params, results)
-                return jsonify({'success': True, 'data': results, 'cached': False})
+        code = symbol[:-3] if symbol.endswith('.SH') or symbol.endswith('.SZ') or symbol.endswith('.HK') else symbol
         
-        elif symbol.endswith('.HK'):
-            code = symbol[:-3]
-            
-            hk_prospectus_func = data_source_factory.get_prospectus_hk()
-            if hk_prospectus_func:
-                hk_prospectus = retry_with_backoff(lambda: hk_prospectus_func())
-            else:
-                hk_prospectus = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_new_stock())
-            
-            hk_prospectus = hk_prospectus[hk_prospectus['代码'].astype(str).str.contains(code) | 
-                                         hk_prospectus['名称'].str.contains(code)]
-            
-            results = []
-            for _, row in hk_prospectus.head(10).iterrows():
-                results.append({
-                    'code': str(row['代码']),
-                    'name': row['名称'],
-                    'ipo_date': row.get('招股日期', ''),
-                    'prospectus_url': row.get('招股书', '')
-                })
-            
-            if results:
-                set_cache('prospectus', cache_params, results)
-                return jsonify({'success': True, 'data': results, 'cached': False})
+        apis_to_try = [
+            lambda: data_source_factory.ak.stock_ipo_info(stock=code),
+            lambda: data_source_factory.ak.stock_ipo_declare_em(),
+            lambda: data_source_factory.ak.stock_ipo_summary_cninfo(),
+        ]
         
-        else:
-            prospectus_func = data_source_factory.get_prospectus_cn()
-            if prospectus_func:
-                prospectus_data = retry_with_backoff(lambda: prospectus_func())
-            else:
-                prospectus_data = retry_with_backoff(lambda: data_source_factory.ak.stock_new_stock_em())
+        results = []
+        
+        for api_func in apis_to_try:
+            try:
+                prospectus_data = retry_with_backoff(api_func)
+                if prospectus_data is not None and not prospectus_data.empty:
+                    code_cols = ['申购代码', '代码', 'stock_code', 'code']
+                    name_cols = ['证券简称', '名称', 'stock_name', 'name']
+                    
+                    matched = None
+                    for col in code_cols:
+                        if col in prospectus_data.columns:
+                            matched = prospectus_data[prospectus_data[col].astype(str).str.contains(code)]
+                            if not matched.empty:
+                                break
+                    
+                    if matched is None or matched.empty:
+                        for col in name_cols:
+                            if col in prospectus_data.columns:
+                                matched = prospectus_data[prospectus_data[col].str.contains(code, na=False)]
+                                if not matched.empty:
+                                    break
+                    
+                    if matched is not None and not matched.empty:
+                        for _, row in matched.head(10).iterrows():
+                            result_code = ''
+                            result_name = ''
+                            for col in code_cols:
+                                if col in row:
+                                    result_code = str(row[col])
+                                    break
+                            for col in name_cols:
+                                if col in row:
+                                    result_name = row[col]
+                                    break
+                            
+                            results.append({
+                                'code': result_code,
+                                'name': result_name,
+                                'ipo_date': row.get('上网发行日期', row.get('招股日期', row.get('发行日期', ''))),
+                                'prospectus_url': row.get('招股书链接', row.get('招股书', ''))
+                            })
+                        break
+            except Exception as e:
+                print(f"Prospectus API failed: {e}", file=sys.stderr)
+        
+        if symbol.endswith('.HK'):
+            hk_apis = [
+                lambda: data_source_factory.ak.stock_ipo_hk_ths(),
+            ]
             
-            prospectus_data = prospectus_data[prospectus_data['申购代码'].astype(str).str.contains(symbol) | 
-                                              prospectus_data['证券简称'].str.contains(symbol)]
-            
-            results = []
-            for _, row in prospectus_data.head(10).iterrows():
-                results.append({
-                    'code': str(row['申购代码']),
-                    'name': row['证券简称'],
-                    'ipo_date': row.get('上网发行日期', ''),
-                    'prospectus_url': row.get('招股书链接', '')
-                })
-            
-            if results:
-                set_cache('prospectus', cache_params, results)
-                return jsonify({'success': True, 'data': results, 'cached': False})
-            
-            hk_prospectus_func = data_source_factory.get_prospectus_hk()
-            if hk_prospectus_func:
-                hk_prospectus = retry_with_backoff(lambda: hk_prospectus_func())
-            else:
-                hk_prospectus = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_new_stock())
-            
-            hk_prospectus = hk_prospectus[hk_prospectus['代码'].astype(str).str.contains(symbol) | 
-                                         hk_prospectus['名称'].str.contains(symbol)]
-            
-            results = []
-            for _, row in hk_prospectus.head(10).iterrows():
-                results.append({
-                    'code': str(row['代码']),
-                    'name': row['名称'],
-                    'ipo_date': row.get('招股日期', ''),
-                    'prospectus_url': row.get('招股书', '')
-                })
-            
-            if results:
-                set_cache('prospectus', cache_params, results)
-                return jsonify({'success': True, 'data': results, 'cached': False})
+            for api_func in hk_apis:
+                try:
+                    hk_prospectus = retry_with_backoff(api_func)
+                    if hk_prospectus is not None and not hk_prospectus.empty:
+                        matched = hk_prospectus[hk_prospectus.get('代码', hk_prospectus.get('code', pd.Series(['']))).astype(str).str.contains(code) | 
+                                                hk_prospectus.get('名称', hk_prospectus.get('name', pd.Series(['']))).str.contains(code, na=False)]
+                        
+                        for _, row in matched.head(10).iterrows():
+                            results.append({
+                                'code': str(row.get('代码', row.get('code', ''))),
+                                'name': row.get('名称', row.get('name', '')),
+                                'ipo_date': row.get('招股日期', ''),
+                                'prospectus_url': row.get('招股书', '')
+                            })
+                        break
+                except Exception as e:
+                    print(f"HK Prospectus API failed: {e}", file=sys.stderr)
+        
+        if results:
+            set_cache('prospectus', cache_params, results)
+            return jsonify({'success': True, 'data': results, 'cached': False})
         
         if cached_data:
-            return jsonify({'success': True, 'data': cached_data, 'cached': True})
+            return jsonify({'success': True, 'data': cached_data, 'cached': True, 'warning': '当前数据源无数据，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': '未找到招股书信息'})
+        return jsonify({'success': False, 'error': '未找到招股书信息，请检查股票代码是否正确'})
     
     except Exception as e:
-        error_msg = f'网络请求失败: {str(e)}'
         print(f"Prospectus error: {e}", file=sys.stderr)
         
         if cached_data:
