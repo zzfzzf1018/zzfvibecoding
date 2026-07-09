@@ -45,6 +45,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/tencent/, ''),
         timeout: 10000,
       },
+      '/api/akshare': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/akshare/, ''),
+        timeout: 15000,
+      },
     },
   },
 })

@@ -12,6 +12,7 @@ const sourceInfo: Record<DataSourceType, { isReal: boolean; description: string 
   sina: { isReal: true, description: '新浪财经实时行情' },
   eastmoney: { isReal: true, description: '东方财富基金数据' },
   tencent: { isReal: true, description: '腾讯财经实时行情（推荐）' },
+  akshare: { isReal: false, description: 'AkShare开源数据（API服务）' },
 };
 
 export const DataSourceSelector = ({ onDataSourceChange }: DataSourceSelectorProps) => {
