@@ -144,58 +144,66 @@ export class EastMoneyDataSource implements DataSource {
       pb: string;
     }> = [];
 
-    let pageNum = 1;
-    const pageSize = 100;
-    let total = pageSize;
+    const etfMarkets = ['b:MK0021', 'b:MK0022', 'b:MK0023', 'b:MK0024'];
 
-    while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
-      const url = '/api/eastmoney/api/qt/clist/get';
-      const params = new URLSearchParams({
-        fid: 'f3',
-        po: '1',
-        pz: String(pageSize),
-        pn: String(pageNum),
-        np: '1',
-        fltt: '2',
-        invt: '2',
-        fs: 'b:MK0021',
-        fields: 'f12,f14,f2,f3,f4,f5,f6,f7,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f33',
-        _: String(Date.now()),
-      });
+    for (const market of etfMarkets) {
+      let pageNum = 1;
+      const pageSize = 500;
+      let total = pageSize;
 
-      const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
-      const data = await response.json();
+      while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
+        const url = '/api/eastmoney/api/qt/clist/get';
+        const params = new URLSearchParams({
+          fid: 'f3',
+          po: '1',
+          pz: String(pageSize),
+          pn: String(pageNum),
+          np: '1',
+          fltt: '2',
+          invt: '2',
+          fs: market,
+          fields: 'f12,f14,f2,f3,f4,f5,f6,f7,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f33',
+          _: String(Date.now()),
+        });
 
-      if (data && data.data) {
-        if (data.data.total) {
-          total = Number(data.data.total);
+        const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
+        const data = await response.json();
+
+        if (data && data.data) {
+          if (data.data.total) {
+            total = Number(data.data.total);
+          }
+
+          if (data.data.diff) {
+            const pageData = data.data.diff.map((item: Record<string, unknown>) => ({
+              code: String(item.f12 || ''),
+              name: String(item.f14 || ''),
+              fullName: String(item.f14 || ''),
+              fundCompany: '东方财富',
+              establishDate: '',
+              scale: String(item.f23 || '0'),
+              trackingIndex: '',
+              nav: String(item.f2 || '0'),
+              change: String(item.f4 || '0'),
+              changePercent: String(item.f3 || '0'),
+              oneYearReturn: String(item.f6 || '0'),
+              pe: String(item.f25 || '0'),
+              pb: String(item.f26 || '0'),
+            }));
+            allData.push(...pageData);
+          }
         }
 
-        if (data.data.diff) {
-          const pageData = data.data.diff.map((item: Record<string, unknown>) => ({
-            code: String(item.f12 || ''),
-            name: String(item.f14 || ''),
-            fullName: String(item.f14 || ''),
-            fundCompany: '东方财富',
-            establishDate: '',
-            scale: String(item.f23 || '0'),
-            trackingIndex: '',
-            nav: String(item.f2 || '0'),
-            change: String(item.f4 || '0'),
-            changePercent: String(item.f3 || '0'),
-            oneYearReturn: String(item.f6 || '0'),
-            pe: String(item.f25 || '0'),
-            pb: String(item.f26 || '0'),
-          }));
-          allData.push(...pageData);
-        }
+        pageNum++;
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
-
-      pageNum++;
-      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    return allData;
+    const uniqueData = allData.filter((item, index, self) => 
+      index === self.findIndex(t => t.code === item.code)
+    );
+
+    return uniqueData;
   }
 
   private async fetchEastMoneyETFDetail(code: string): Promise<ETFDetailResponse> {

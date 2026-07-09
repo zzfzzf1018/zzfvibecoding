@@ -44,8 +44,21 @@ if %errorlevel% neq 0 (
 echo.
 echo 依赖安装成功!
 echo.
+
+echo 正在编译项目...
+npm run build
+
+if %errorlevel% neq 0 (
+    echo 警告: 生产编译失败，将使用开发模式启动
+) else (
+    echo 编译成功!
+)
+
+echo.
 echo 启动开发服务器...
 echo 访问地址: http://localhost:5173
+echo.
+echo 开发模式会自动检测文件变化并热更新，无需手动重启
 echo.
 
 npm run dev

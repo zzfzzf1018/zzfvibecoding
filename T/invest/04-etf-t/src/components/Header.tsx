@@ -1,5 +1,5 @@
 import { Search, TrendingUp } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DataSourceSelector } from './DataSourceSelector';
 
 interface HeaderProps {
@@ -10,11 +10,25 @@ interface HeaderProps {
 
 export const Header = ({ onSearch, keyword, onDataSourceChange }: HeaderProps) => {
   const [inputValue, setInputValue] = useState(keyword);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSearch(inputValue);
-  };
+  useEffect(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      onSearch(inputValue);
+    }, 300);
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [inputValue, onSearch]);
+
+  useEffect(() => {
+    setInputValue(keyword);
+  }, [keyword]);
 
   return (
     <header className="bg-primary-800 text-white sticky top-0 z-50 shadow-lg">
@@ -30,7 +44,7 @@ export const Header = ({ onSearch, keyword, onDataSourceChange }: HeaderProps) =
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex-1 max-w-md mx-8">
+          <div className="flex-1 max-w-md mx-8">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-300 h-5 w-5" />
               <input
@@ -41,7 +55,7 @@ export const Header = ({ onSearch, keyword, onDataSourceChange }: HeaderProps) =
                 className="w-full pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-up/50 focus:border-transparent text-sm"
               />
             </div>
-          </form>
+          </div>
 
           <div className="flex items-center space-x-4">
             <DataSourceSelector onDataSourceChange={onDataSourceChange} />
