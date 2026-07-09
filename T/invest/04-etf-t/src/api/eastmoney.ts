@@ -144,14 +144,14 @@ export class EastMoneyDataSource implements DataSource {
       pb: string;
     }> = [];
 
-    const etfMarkets = ['b:MK0021', 'b:MK0022', 'b:MK0023', 'b:MK0024'];
+    const etfMarkets = ['b:MK0021'];
 
     for (const market of etfMarkets) {
       let pageNum = 1;
-      const pageSize = 500;
+      const pageSize = 100;
       let total = pageSize;
 
-      while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
+      while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 10) {
         const url = '/api/eastmoney/api/qt/clist/get';
         const params = new URLSearchParams({
           fid: 'f3',
@@ -166,36 +166,41 @@ export class EastMoneyDataSource implements DataSource {
           _: String(Date.now()),
         });
 
-        const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
-        const data = await response.json();
+        try {
+          const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
+          const data = await response.json();
 
-        if (data && data.data) {
-          if (data.data.total) {
-            total = Number(data.data.total);
-          }
+          if (data && data.data) {
+            if (data.data.total) {
+              total = Number(data.data.total);
+            }
 
-          if (data.data.diff) {
-            const pageData = data.data.diff.map((item: Record<string, unknown>) => ({
-              code: String(item.f12 || ''),
-              name: String(item.f14 || ''),
-              fullName: String(item.f14 || ''),
-              fundCompany: '东方财富',
-              establishDate: '',
-              scale: String(item.f23 || '0'),
-              trackingIndex: '',
-              nav: String(item.f2 || '0'),
-              change: String(item.f4 || '0'),
-              changePercent: String(item.f3 || '0'),
-              oneYearReturn: String(item.f6 || '0'),
-              pe: String(item.f25 || '0'),
-              pb: String(item.f26 || '0'),
-            }));
-            allData.push(...pageData);
+            if (data.data.diff) {
+              const pageData = data.data.diff.map((item: Record<string, unknown>) => ({
+                code: String(item.f12 || ''),
+                name: String(item.f14 || ''),
+                fullName: String(item.f14 || ''),
+                fundCompany: '东方财富',
+                establishDate: '',
+                scale: String(item.f23 || '0'),
+                trackingIndex: '',
+                nav: String(item.f2 || '0'),
+                change: String(item.f4 || '0'),
+                changePercent: String(item.f3 || '0'),
+                oneYearReturn: String(item.f6 || '0'),
+                pe: String(item.f25 || '0'),
+                pb: String(item.f26 || '0'),
+              }));
+              allData.push(...pageData);
+            }
           }
+        } catch (error) {
+          console.warn(`东方财富API请求失败 (page ${pageNum}):`, error);
+          break;
         }
 
         pageNum++;
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 

@@ -119,15 +119,15 @@ export class AkShareDataSource implements DataSource {
     }
 
     const allCodes: string[] = [];
-    const etfMarkets = ['b:MK0021', 'b:MK0022', 'b:MK0023', 'b:MK0024'];
+    const etfMarkets = ['b:MK0021'];
 
     for (const market of etfMarkets) {
       try {
         let pageNum = 1;
-        const pageSize = 500;
+        const pageSize = 100;
         let total = pageSize;
 
-        while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
+        while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 10) {
           const url = '/api/eastmoney/api/qt/clist/get';
           const params = new URLSearchParams({
             fid: 'f3',
@@ -142,28 +142,33 @@ export class AkShareDataSource implements DataSource {
             _: String(Date.now()),
           });
 
-          const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
-          const data = await response.json();
+          try {
+            const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
+            const data = await response.json();
 
-          if (data && data.data) {
-            if (data.data.total) {
-              total = Number(data.data.total);
-            }
+            if (data && data.data) {
+              if (data.data.total) {
+                total = Number(data.data.total);
+              }
 
-            if (data.data.diff) {
-              const pageCodes = data.data.diff.map((item: Record<string, unknown>) => {
-                const code = String(item.f12 || '');
-                if (code.startsWith('5')) {
-                  return `sh${code}`;
-                }
-                return `sz${code}`;
-              }).filter(Boolean);
-              allCodes.push(...pageCodes);
+              if (data.data.diff) {
+                const pageCodes = data.data.diff.map((item: Record<string, unknown>) => {
+                  const code = String(item.f12 || '');
+                  if (code.startsWith('5')) {
+                    return `sh${code}`;
+                  }
+                  return `sz${code}`;
+                }).filter(Boolean);
+                allCodes.push(...pageCodes);
+              }
             }
+          } catch (error) {
+            console.warn(`AkShare代码获取失败 (page ${pageNum}):`, error);
+            break;
           }
 
           pageNum++;
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       } catch {
       }
@@ -198,15 +203,15 @@ export class AkShareDataSource implements DataSource {
 
   private async fetchAkShareETFData(_codes: string[]): Promise<AkShareETFData[]> {
     const allData: AkShareETFData[] = [];
-    const etfMarkets = ['b:MK0021', 'b:MK0022', 'b:MK0023', 'b:MK0024'];
+    const etfMarkets = ['b:MK0021'];
 
     for (const market of etfMarkets) {
       try {
         let pageNum = 1;
-        const pageSize = 500;
+        const pageSize = 100;
         let total = pageSize;
 
-        while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
+        while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 10) {
           const url = '/api/eastmoney/api/qt/clist/get';
           const params = new URLSearchParams({
             fid: 'f3',
@@ -221,48 +226,50 @@ export class AkShareDataSource implements DataSource {
             _: String(Date.now()),
           });
 
-          const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
-          const data = await response.json();
+          try {
+            const response = await this.fetchWithRetry(`${url}?${params.toString()}`);
+            const data = await response.json();
 
-          if (data && data.data) {
-            if (data.data.total) {
-              total = Number(data.data.total);
-            }
+            if (data && data.data) {
+              if (data.data.total) {
+                total = Number(data.data.total);
+              }
 
-            if (data.data.diff) {
-              const pageData = data.data.diff.map((item: Record<string, unknown>) => {
-                const code = String(item.f12 || '');
-                const marketCode = code.startsWith('5') ? 'SH' : 'SZ';
-                const assetType = market === 'b:MK0021' ? '股票型' : 
-                                  market === 'b:MK0022' ? '债券型' :
-                                  market === 'b:MK0023' ? '货币型' : '商品型';
-                return {
-                  ts_code: `${code}.${marketCode}`,
-                  name: String(item.f14 || code),
-                  market: marketCode,
-                  list_date: '',
-                  asset_type: assetType,
-                  fund_type: 'ETF',
-                  fund_family: this.getFundFamily(code),
-                  fund_manager: '',
-                  fund_scale: String(item.f23 || '0'),
-                  nav: String(item.f2 || '0'),
-                  price: String(item.f2 || '0'),
-                  change: String(item.f4 || '0'),
-                  change_pct: String(item.f3 || '0'),
-                  pe: String(item.f25 || '0'),
-                  pb: String(item.f26 || '0'),
-                  turnover_rate: '0',
-                  volume: String(item.f5 || '0'),
-                  amount: String(item.f6 || '0'),
-                };
-              });
-              allData.push(...pageData);
+              if (data.data.diff) {
+                const pageData = data.data.diff.map((item: Record<string, unknown>) => {
+                  const code = String(item.f12 || '');
+                  const marketCode = code.startsWith('5') ? 'SH' : 'SZ';
+                  return {
+                    ts_code: `${code}.${marketCode}`,
+                    name: String(item.f14 || code),
+                    market: marketCode,
+                    list_date: '',
+                    asset_type: '股票型',
+                    fund_type: 'ETF',
+                    fund_family: this.getFundFamily(code),
+                    fund_manager: '',
+                    fund_scale: String(item.f23 || '0'),
+                    nav: String(item.f2 || '0'),
+                    price: String(item.f2 || '0'),
+                    change: String(item.f4 || '0'),
+                    change_pct: String(item.f3 || '0'),
+                    pe: String(item.f25 || '0'),
+                    pb: String(item.f26 || '0'),
+                    turnover_rate: '0',
+                    volume: String(item.f5 || '0'),
+                    amount: String(item.f6 || '0'),
+                  };
+                });
+                allData.push(...pageData);
+              }
             }
+          } catch (error) {
+            console.warn(`AkShare API请求失败 (page ${pageNum}):`, error);
+            break;
           }
 
           pageNum++;
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       } catch {
       }
