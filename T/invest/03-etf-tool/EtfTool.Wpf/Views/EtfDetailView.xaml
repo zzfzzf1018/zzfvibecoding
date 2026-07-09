@@ -1,0 +1,190 @@
+
+<UserControl x:Class="EtfTool.Wpf.Views.EtfDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:Controls="http://metro.mahapps.com/winfx/xaml/controls"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             xmlns:vm="clr-namespace:EtfTool.Wpf.ViewModels"
+             xmlns:core="clr-namespace:EtfTool.Core.Models"
+             xmlns:liveCharts="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:charts="clr-namespace:LiveChartsCore;assembly=LiveChartsCore"
+             xmlns:converters="clr-namespace:EtfTool.Wpf.Converters"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <converters:ChangeColorConverter x:Key="ChangeColorConverter" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="100" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding EtfCode}" FontSize="20" FontWeight="Bold" />
+                <TextBlock Text="{Binding EtfInfo.Name}" FontSize="18" Margin="10,0,0,0" />
+                <TextBlock Text="{Binding EtfInfo.LatestPrice}" FontSize="18" Margin="10,0,0,0" 
+                           Foreground="{Binding EtfInfo.ChangePercent, Converter={StaticResource ChangeColorConverter}}" />
+                <TextBlock Text="{Binding EtfInfo.ChangePercent, StringFormat='({0}%)'}" FontSize="18" Margin="5,0,0,0"
+                           Foreground="{Binding EtfInfo.ChangePercent, Converter={StaticResource ChangeColorConverter}}" />
+            </StackPanel>
+
+            <Button Grid.Column="1"
+                    Command="{Binding RefreshCommand}"
+                    IsEnabled="{Binding !IsLoading}">
+                <StackPanel Orientation="Horizontal">
+                    <iconPacks:PackIconMaterial Kind="Refresh" Width="16" Height="16" />
+                    <TextBlock Text="刷新" Margin="5,0,0,0" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <TabControl Grid.Row="1" Margin="10">
+            <TabItem Header="基本信息">
+                <ScrollViewer>
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="基金全称" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.FullName}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="最新净值" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.LatestPrice}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="总资产" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.TotalAssets}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="基金份额" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.Unit}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="PE" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.PeRatio}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="PB" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.PbRatio}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="管理费" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.ManagementFee}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="托管费" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.CustodyFee}" Grid.Column="1" Margin="5" />
+
+                        <TextBlock Text="成立日期" Grid.Column="0" Margin="5" />
+                        <TextBlock Text="{Binding EtfInfo.ListedDate}" Grid.Column="1" Margin="5" />
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="成分股">
+                <DataGrid ItemsSource="{Binding Components}" AutoGenerateColumns="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="排名" Binding="{Binding Rank}" Width="60" />
+                        <DataGridTextColumn Header="代码" Binding="{Binding StockCode}" Width="100" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding StockName}" Width="120" />
+                        <DataGridTextColumn Header="权重(%)" Binding="{Binding Weight}" Width="100" />
+                        <DataGridTextColumn Header="PE" Binding="{Binding PeRatio}" Width="80" />
+                        <DataGridTextColumn Header="PB" Binding="{Binding PbRatio}" Width="80" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="K线">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="5">
+                        <Button Content="日线" 
+                                Command="{Binding LoadKlineDataCommand}" 
+                                CommandParameter="day" />
+                        <Button Content="周线" 
+                                Command="{Binding LoadKlineDataCommand}" 
+                                CommandParameter="week" />
+                        <Button Content="月线" 
+                                Command="{Binding LoadKlineDataCommand}" 
+                                CommandParameter="month" />
+                    </StackPanel>
+
+                    <liveCharts:CartesianChart Grid.Row="1" 
+                                               Series="{Binding KlineSeries}"
+                                               XAxes="{Binding XAxes}"
+                                               YAxes="{Binding YAxes}">
+                    </liveCharts:CartesianChart>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="估值分析">
+                <ScrollViewer>
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="当前PE" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.CurrentPe}" FontSize="20" FontWeight="Bold" Margin="5" />
+
+                            <TextBlock Text="PE分位数" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.PePercentile, StringFormat=\{0\}%}" FontSize="20" FontWeight="Bold" Margin="5" />
+
+                            <TextBlock Text="PE均值" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.AvgPe}" FontSize="16" Margin="5" />
+
+                            <TextBlock Text="PE区间" FontSize="14" Margin="5" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding EtfStatistics.PeMin}" FontSize="16" Margin="5,5,0,5" />
+                                <TextBlock Text=" - " FontSize="16" Margin="0,5,0,5" />
+                                <TextBlock Text="{Binding EtfStatistics.PeMax}" FontSize="16" Margin="0,5,5,5" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="当前PB" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.CurrentPb}" FontSize="20" FontWeight="Bold" Margin="5" />
+
+                            <TextBlock Text="PB分位数" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.PbPercentile, StringFormat=\{0\}%}" FontSize="20" FontWeight="Bold" Margin="5" />
+
+                            <TextBlock Text="PB均值" FontSize="14" Margin="5" />
+                            <TextBlock Text="{Binding EtfStatistics.AvgPb}" FontSize="16" Margin="5" />
+
+                            <TextBlock Text="PB区间" FontSize="14" Margin="5" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding EtfStatistics.PbMin}" FontSize="16" Margin="5,5,0,5" />
+                                <TextBlock Text=" - " FontSize="16" Margin="0,5,0,5" />
+                                <TextBlock Text="{Binding EtfStatistics.PbMax}" FontSize="16" Margin="0,5,5,5" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="分红信息">
+                <DataGrid ItemsSource="{Binding Dividends}" AutoGenerateColumns="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="分红日期" Binding="{Binding DividendDate}" Width="150" />
+                        <DataGridTextColumn Header="每份分红" Binding="{Binding DividendPerUnit}" Width="120" />
+                        <DataGridTextColumn Header="分红类型" Binding="{Binding DividendType}" Width="120" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

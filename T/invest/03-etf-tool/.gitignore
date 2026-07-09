@@ -1,0 +1,76 @@
+
+## Build outputs
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Visual Studio cache/options
+.vs/
+.VSCode/
+.vscode/
+
+## ReSharper
+_ReSharper*/
+*.resharper
+*.DotSettings.user
+
+## Rider
+.idea/
+*.iml
+*.ipr
+*.iws
+
+## SQLite databases
+Cache/*.db
+*.db
+
+## Logs
+*.log
+logs/
+
+## NuGet
+.nuget/
+packages/
+*.nupkg
+project.lock.json
+
+## OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+## Test results
+TestResults/
+*.trx
+*.coverage
+
+## Publish outputs
+publish/
+dist/
+out/
+
+## Temporary files
+*.tmp
+*.temp
+
+## Build artifacts
+*.dll
+*.exe
+*.pdb
+*.xml
+*.json
+*.runtimeconfig.dev.json
+*.deps.json
+
+## PowerShell
+*.ps1c
+
+## Node.js
+node_modules/
+package-lock.json
+
+## Yarn
+yarn.lock

@@ -1,0 +1,54 @@
+{
+  "name": "stock-finance-query",
+  "version": "1.0.0",
+  "description": "Windows桌面端财务数据查询软件，支持A股和港股",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && electron .\"",
+    "start:renderer": "cd src/renderer && npm start",
+    "install:renderer": "cd src/renderer && npm install"
+  },
+  "build": {
+    "appId": "com.stock.finance.query",
+    "productName": "股票财务查询",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/main/**/*",
+      "src/python/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "keywords": [
+    "stock",
+    "finance",
+    "A股",
+    "港股",
+    "财务数据"
+  ],
+  "author": "Stock Finance Query",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "child_process": "^1.0.2",
+    "express": "^4.18.2"
+  }
+}
