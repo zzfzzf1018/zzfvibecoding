@@ -5,7 +5,7 @@ import FinanceReport from './components/FinanceReport';
 import CompanyAnalysis from './components/CompanyAnalysis';
 import Prospectus from './components/Prospectus';
 import { SearchOutlined, FileTextOutlined, BarChartOutlined, ReadOutlined, DatabaseOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import axios from './utils/axios';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -23,7 +23,7 @@ function App() {
 
     const fetchDataSources = async () => {
         try {
-            const response = await axios.get('http://localhost:5000/api/data_source/list');
+            const response = await axios.get('/data_source/list');
             if (response.data.success) {
                 setDataSources(response.data.data);
                 setCurrentSource(response.data.current);
@@ -35,7 +35,7 @@ function App() {
 
     const handleDataSourceChange = async (value) => {
         try {
-            const response = await axios.post('http://localhost:5000/api/data_source/switch', {
+            const response = await axios.post('/data_source/switch', {
                 source_id: value
             });
             if (response.data.success) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Spin, message, Tag, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import axios from '../utils/axios';
 
 function CompanyAnalysis({ stock }) {
     const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ function CompanyAnalysis({ stock }) {
         
         setLoading(true);
         try {
-            const response = await axios.get('http://localhost:5000/api/stock/analysis', {
+            const response = await axios.get('/stock/analysis', {
                 params: { symbol: stock.full_code }
             });
             

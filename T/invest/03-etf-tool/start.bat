@@ -1,65 +1,63 @@
-
 @echo off
-chcp 65001 >nul
-title 大A ETF工具 - 启动器
+title ETF Tool Launcher
 
 echo ==============================================
-echo           大A ETF工具 - 一键启动脚本
+echo          ETF Tool - One-click Launcher
 echo ==============================================
 echo.
-echo 项目地址: https://github.com/example/etf-tool
-echo 文档目录: docs/
-echo - requirements.md   : 需求文档
-echo - design.md         : 设计文档
-echo - ai-guidance.md    : AI开发指导文档
+echo Project: EtfTool
+echo Docs: docs/
+echo - requirements.md   : Requirements
+echo - design.md         : Design
+echo - ai-guidance.md    : AI Guidance
 echo ==============================================
 echo.
 
 if not exist "EtfTool.sln" (
-    echo [错误] 未找到解决方案文件 EtfTool.sln
-    echo [提示] 请确保在项目根目录下运行此脚本
+    echo [ERROR] Solution file not found: EtfTool.sln
+    echo [TIP] Run this script from project root directory
     pause
     exit /b 1
 )
 
-echo [1/5] 正在检查 .NET SDK 是否安装...
+echo [1/5] Checking .NET SDK installation...
 dotnet --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未安装 .NET SDK
-    echo [提示] 请访问 https://dotnet.microsoft.com/download 安装 .NET 6.0 或更高版本
+    echo [ERROR] .NET SDK not installed
+    echo [TIP] Download from https://dotnet.microsoft.com/download
     pause
     exit /b 1
 )
 
 for /f "tokens=*" %%i in ('dotnet --version') do set DOTNET_VERSION=%%i
-echo [完成] .NET SDK 已安装 (版本: %DOTNET_VERSION%)
+echo [OK] .NET SDK installed (Version: %DOTNET_VERSION%)
 echo.
 
-echo [2/5] 正在还原依赖包...
+echo [2/5] Restoring dependencies...
 dotnet restore EtfTool.sln --source https://api.nuget.org/v3/index.json
 if %errorlevel% neq 0 (
-    echo [错误] 依赖包还原失败
-    echo [提示] 请检查网络连接或代理设置
+    echo [ERROR] Failed to restore dependencies
+    echo [TIP] Check network connection
     pause
     exit /b 1
 )
 
-echo [完成] 依赖包还原成功
+echo [OK] Dependencies restored successfully
 echo.
 
-echo [3/5] 正在构建项目...
+echo [3/5] Building project...
 dotnet build EtfTool.sln --configuration Release --source https://api.nuget.org/v3/index.json
 if %errorlevel% neq 0 (
-    echo [错误] 项目构建失败
-    echo [提示] 请检查代码错误或项目配置
+    echo [ERROR] Build failed
+    echo [TIP] Check code errors
     pause
     exit /b 1
 )
 
-echo [完成] 项目构建成功
+echo [OK] Build succeeded
 echo.
 
-echo [4/5] 正在启动应用...
+echo [4/5] Starting application...
 echo ==============================================
 echo.
 
@@ -67,6 +65,6 @@ dotnet run --project EtfTool.Wpf\EtfTool.Wpf.csproj --configuration Release
 
 echo.
 echo ==============================================
-echo [5/5] 应用已退出
-echo [提示] 如需重新启动，请再次运行此脚本
+echo [5/5] Application exited
+echo [TIP] Run this script again to restart
 pause

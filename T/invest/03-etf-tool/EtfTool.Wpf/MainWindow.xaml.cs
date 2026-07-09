@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using EtfTool.Core.Models;
 using EtfTool.Data.Cache;
 using EtfTool.Data.Providers;
@@ -21,7 +22,6 @@ namespace EtfTool.Wpf
             var providerFactory = new EtfDataProviderFactory();
             _etfService = new EtfService(providerFactory, cacheManager);
 
-            DataContext = new MainViewModel(_etfService);
             InitializeComponent();
         }
 
@@ -31,6 +31,22 @@ namespace EtfTool.Wpf
             {
                 var detailView = new EtfDetailView(etf.Code, _etfService);
                 MainFrame.Navigate(detailView);
+            }
+        }
+
+        private void Border_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                border.Background = (Brush)FindResource("MahApps.Brushes.Gray2");
+            }
+        }
+
+        private void Border_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                border.Background = Brushes.Transparent;
             }
         }
     }

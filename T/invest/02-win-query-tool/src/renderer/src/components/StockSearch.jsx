@@ -1,31 +1,61 @@
 import React, { useState, useEffect } from 'react';
 import { Input, Button, Table, Tag, Spin, message, Select } from 'antd';
-import axios from 'axios';
+import axios from '../utils/axios';
 
 const { Search } = Input;
 const { Option } = Select;
+
+const COMMON_STOCKS = [
+    {'code': '600519', 'name': '贵州茅台', 'market': 'cn', 'full_code': '600519.SH'},
+    {'code': '000858', 'name': '五粮液', 'market': 'cn', 'full_code': '000858.SZ'},
+    {'code': '601318', 'name': '中国平安', 'market': 'cn', 'full_code': '601318.SH'},
+    {'code': '000001', 'name': '平安银行', 'market': 'cn', 'full_code': '000001.SZ'},
+    {'code': '600036', 'name': '招商银行', 'market': 'cn', 'full_code': '600036.SH'},
+    {'code': '00700', 'name': '腾讯控股', 'market': 'hk', 'full_code': '00700.HK'},
+    {'code': '00005', 'name': '汇丰控股', 'market': 'hk', 'full_code': '00005.HK'},
+    {'code': '688981', 'name': '中芯国际', 'market': 'cn', 'full_code': '688981.SH'},
+    {'code': '002594', 'name': '比亚迪', 'market': 'cn', 'full_code': '002594.SZ'},
+    {'code': '000651', 'name': '格力电器', 'market': 'cn', 'full_code': '000651.SZ'},
+];
 
 function StockSearch({ onStockSelect }) {
     const [keyword, setKeyword] = useState('');
     const [market, setMarket] = useState('all');
     const [loading, setLoading] = useState(false);
-    const [data, setData] = useState([]);
+    const [data, setData] = useState(COMMON_STOCKS);
+    const [serviceReady, setServiceReady] = useState(false);
 
     useEffect(() => {
-        fetchPopularStocks();
+        checkServiceAndFetch();
     }, []);
+
+    const checkServiceAndFetch = async () => {
+        try {
+            await axios.get('/health');
+            setServiceReady(true);
+            fetchPopularStocks();
+        } catch (error) {
+            console.log('Service not ready yet, showing common stocks');
+            setServiceReady(false);
+            setTimeout(checkServiceAndFetch, 2000);
+        }
+    };
 
     const fetchPopularStocks = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('http://localhost:5000/api/stock/search', {
+            const response = await axios.get('/stock/search', {
                 params: { keyword: '', market: 'all' }
             });
             if (response.data.success) {
                 setData(response.data.data.slice(0, 15));
+                if (response.data.warning) {
+                    message.warning(response.data.warning);
+                }
             }
         } catch (error) {
-            message.error('获取股票列表失败');
+            console.error('获取股票列表失败:', error);
+            setData(COMMON_STOCKS);
         } finally {
             setLoading(false);
         }
@@ -39,7 +69,7 @@ function StockSearch({ onStockSelect }) {
 
         try {
             setLoading(true);
-            const response = await axios.get('http://localhost:5000/api/stock/search', {
+            const response = await axios.get('/stock/search', {
                 params: { keyword, market }
             });
             

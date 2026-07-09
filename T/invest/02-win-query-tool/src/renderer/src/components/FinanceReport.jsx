@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Table, Spin, message, Tabs, Tag, DownloadOutlined } from 'antd';
-import axios from 'axios';
+import axios from '../utils/axios';
 
 const { TabPane } = Tabs;
 
@@ -20,7 +20,7 @@ function FinanceReport({ stock }) {
 
     const fetchReport = async (reportType) => {
         try {
-            const response = await axios.get('http://localhost:5000/api/stock/finance_report', {
+            const response = await axios.get('/stock/finance_report', {
                 params: { symbol: stock.full_code, type: reportType }
             });
             
@@ -71,7 +71,7 @@ function FinanceReport({ stock }) {
         }
 
         try {
-            const response = await axios.get('http://localhost:5000/api/stock/download_report', {
+            const response = await axios.get('/stock/download_report', {
                 params: { symbol: stock.full_code, type: reportType }
             });
             

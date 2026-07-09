@@ -61,11 +61,11 @@ namespace EtfTool.Wpf.ViewModels
             AvailableDataSources.Add(DataSource.Sina);
             AvailableDataSources.Add(DataSource.EastMoney);
 
-            SearchCommand = new RelayCommand(async () => await SearchEtfAsync());
+            SearchCommand = new RelayCommand(SearchEtfAsync);
             ClearCacheCommand = new RelayCommand(() => _etfService.ClearCache());
         }
 
-        private async Task SearchEtfAsync()
+        private async void SearchEtfAsync()
         {
             if (string.IsNullOrWhiteSpace(SearchKeyword))
                 return;

@@ -21,7 +21,7 @@ akshare_available = data_source_factory.is_available()
 
 from cache import set_cache, get_cache, clear_cache, clear_expired_cache, get_cache_stats
 
-def retry_with_backoff(func, max_retries=5, delay=2):
+def retry_with_backoff(func, max_retries=2, delay=1):
     for i in range(max_retries):
         try:
             return func()

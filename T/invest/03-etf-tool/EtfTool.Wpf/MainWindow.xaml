@@ -6,8 +6,6 @@
                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                      xmlns:Controls="http://metro.mahapps.com/winfx/xaml/controls"
                      xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
-                     xmlns:vm="clr-namespace:EtfTool.Wpf.ViewModels"
-                     xmlns:core="clr-namespace:EtfTool.Core.Models"
                      mc:Ignorable="d"
                      Title="大A ETF工具" Height="900" Width="1200"
                      GlowBrush="{DynamicResource AccentColorBrush}"
@@ -23,73 +21,140 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="10">
+        <Border Grid.Row="0" Margin="12" Background="White" CornerRadius="8">
+            <Grid Margin="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="100" />
+                    <ColumnDefinition Width="100" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Margin="8,8,0,8" Background="White" 
+                        BorderBrush="{DynamicResource AccentColorBrush}" BorderThickness="1" CornerRadius="4">
+                    <DockPanel>
+                        <iconPacks:PackIconMaterial DockPanel.Dock="Left" Kind="Magnify" Width="20" Height="20" 
+                                                    Foreground="{DynamicResource AccentColorBrush}" Margin="8,0,5,0" />
+                        <TextBox Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                 BorderThickness="0" Background="Transparent"
+                                 FontSize="14" Padding="0,8,8,8"
+                                 Controls:TextBoxHelper.ClearTextButton="True">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                            </TextBox.InputBindings>
+                            <TextBox.ToolTip>
+                                <ToolTip>支持模糊查询，可输入ETF代码或名称</ToolTip>
+                            </TextBox.ToolTip>
+                        </TextBox>
+                    </DockPanel>
+                </Border>
+
+                <Button Grid.Column="1" 
+                        Margin="8"
+                        Command="{Binding SearchCommand}"
+                        IsEnabled="{Binding !IsLoading}"
+                        Style="{DynamicResource AccentedSquareButtonStyle}"
+                        Height="40">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <iconPacks:PackIconMaterial Kind="Magnify" Width="18" Height="18" />
+                        <TextBlock Text="搜索" Margin="5,0,0,0" FontSize="14" />
+                    </StackPanel>
+                </Button>
+
+                <ComboBox Grid.Column="2"
+                          Margin="8"
+                          ItemsSource="{Binding AvailableDataSources}"
+                          SelectedItem="{Binding SelectedDataSource}"
+                          Height="40">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" FontSize="13" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <Button Grid.Column="3"
+                        Margin="8"
+                        Command="{Binding ClearCacheCommand}"
+                        Style="{DynamicResource SquareButtonStyle}"
+                        Height="40">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <iconPacks:PackIconMaterial Kind="RefreshCw" Width="18" Height="18" />
+                        <TextBlock Text="清除缓存" Margin="5,0,0,0" FontSize="13" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="12,0,12,12">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="150" />
-                <ColumnDefinition Width="120" />
-                <ColumnDefinition Width="100" />
             </Grid.ColumnDefinitions>
 
-            <TextBox Grid.Column="0" 
-                     Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}"
-                     Controls:TextBoxHelper.Watermark="输入ETF代码或名称..."
-                     Controls:TextBoxHelper.ClearTextButton="True">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                </TextBox.InputBindings>
-            </TextBox>
-
-            <Button Grid.Column="1" 
-                    Command="{Binding SearchCommand}"
-                    IsEnabled="{Binding !IsLoading}"
-                    Style="{DynamicResource AccentedSquareButtonStyle}">
-                <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconMaterial Kind="Magnify" Width="16" Height="16" />
-                    <TextBlock Text="搜索" Margin="5,0,0,0" />
-                </StackPanel>
-            </Button>
-
-            <ComboBox Grid.Column="2"
-                      ItemsSource="{Binding AvailableDataSources}"
-                      SelectedItem="{Binding SelectedDataSource}">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <Button Grid.Column="3"
-                    Command="{Binding ClearCacheCommand}"
-                    Content="清除缓存" />
-        </Grid>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="350" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Controls:MetroAnimatedSingleRowTabControl Grid.Column="0">
+            <Controls:MetroAnimatedSingleRowTabControl Grid.Column="0" Background="White">
                 <TabItem Header="搜索结果">
-                    <ListBox ItemsSource="{Binding SearchResults}"
-                             SelectedValuePath="Code"
-                             SelectedValue="{Binding SelectedEtfCode}"
-                             MouseDoubleClick="ListBox_MouseDoubleClick">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="5">
-                                    <TextBlock Text="{Binding Code}" FontWeight="Bold" Width="80" />
-                                    <TextBlock Text="{Binding Name}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8" HorizontalAlignment="Right">
+                            <TextBlock Text="共 " Foreground="Gray" FontSize="12" />
+                            <TextBlock Text="{Binding SearchResults.Count}" 
+                                       Foreground="{DynamicResource AccentColorBrush}" 
+                                       FontWeight="Bold" FontSize="12" />
+                            <TextBlock Text=" 条结果" Foreground="Gray" FontSize="12" />
+                        </StackPanel>
+
+                        <ListBox Grid.Row="1" 
+                                 ItemsSource="{Binding SearchResults}"
+                                 SelectedValuePath="Code"
+                                 SelectedValue="{Binding SelectedEtfCode}"
+                                 MouseDoubleClick="ListBox_MouseDoubleClick"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="4">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="8,6" 
+                                            BorderBrush="LightGray" 
+                                            BorderThickness="0,0,0,1"
+                                            MouseEnter="Border_MouseEnter"
+                                            MouseLeave="Border_MouseLeave">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Code}" 
+                                                       FontWeight="Bold" 
+                                                       Width="80" 
+                                                       Foreground="{DynamicResource AccentColorBrush}"
+                                                       FontFamily="Consolas" FontSize="13" />
+                                            <TextBlock Text="{Binding Name}" FontSize="13" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="{x:Type ListBoxItem}">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource AccentColorBrush}" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                    </Grid>
                 </TabItem>
             </Controls:MetroAnimatedSingleRowTabControl>
 
-            <Frame Grid.Column="1" x:Name="MainFrame" NavigationUIVisibility="Hidden" />
+            <Border Grid.Column="1" Margin="8,0,0,0" Background="White" CornerRadius="8">
+                <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Background="Transparent" />
+            </Border>
         </Grid>
     </Grid>
 </Controls:MetroWindow>

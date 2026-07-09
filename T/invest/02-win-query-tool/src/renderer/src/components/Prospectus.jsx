@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Table, Spin, message, Tag, Input } from 'antd';
 import { SearchOutlined, DownloadOutlined, LinkOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import axios from '../utils/axios';
 
 function Prospectus({ stock }) {
     const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ function Prospectus({ stock }) {
         
         setLoading(true);
         try {
-            const response = await axios.get('http://localhost:5000/api/stock/prospectus', {
+            const response = await axios.get('/stock/prospectus', {
                 params: { symbol: stock.full_code }
             });
             
@@ -46,7 +46,7 @@ function Prospectus({ stock }) {
         }
 
         try {
-            const response = await axios.get('http://localhost:5000/api/stock/download_prospectus', {
+            const response = await axios.get('/stock/download_prospectus', {
                 params: { url, filename: `${name}_招股书.pdf` }
             });
             
@@ -87,7 +87,7 @@ function Prospectus({ stock }) {
 
         try {
             setLoading(true);
-            const response = await axios.get('http://localhost:5000/api/stock/prospectus', {
+            const response = await axios.get('/stock/prospectus', {
                 params: { symbol: keyword }
             });
             
