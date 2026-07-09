@@ -84,12 +84,55 @@ export class EastMoneyDataSource implements DataSource {
     pb: string;
   }>> {
     try {
+      return await this.fetchAllPages();
+    } catch (error) {
+      console.error('EastMoney API request failed:', error);
+      return this.getMockEastMoneyData();
+    }
+  }
+
+  private async fetchAllPages(): Promise<Array<{
+    code: string;
+    name: string;
+    fullName: string;
+    fundCompany: string;
+    establishDate: string;
+    scale: string;
+    trackingIndex: string;
+    nav: string;
+    change: string;
+    changePercent: string;
+    oneYearReturn: string;
+    pe: string;
+    pb: string;
+  }>> {
+    const allData: Array<{
+      code: string;
+      name: string;
+      fullName: string;
+      fundCompany: string;
+      establishDate: string;
+      scale: string;
+      trackingIndex: string;
+      nav: string;
+      change: string;
+      changePercent: string;
+      oneYearReturn: string;
+      pe: string;
+      pb: string;
+    }> = [];
+
+    let pageNum = 1;
+    const pageSize = 100;
+    let total = pageSize;
+
+    while (pageNum <= Math.ceil(total / pageSize) && pageNum <= 20) {
       const url = '/api/eastmoney/api/qt/clist/get';
       const params = new URLSearchParams({
         fid: 'f3',
         po: '1',
-        pz: '100',
-        pn: '1',
+        pz: String(pageSize),
+        pn: String(pageNum),
         np: '1',
         fltt: '2',
         invt: '2',
@@ -107,28 +150,36 @@ export class EastMoneyDataSource implements DataSource {
 
       const data = await response.json();
 
-      if (data && data.data && data.data.diff) {
-        return data.data.diff.map((item: Record<string, unknown>) => ({
-          code: String(item.f12 || ''),
-          name: String(item.f14 || ''),
-          fullName: String(item.f14 || ''),
-          fundCompany: '东方财富',
-          establishDate: '',
-          scale: String(item.f23 || '0'),
-          trackingIndex: '',
-          nav: String(item.f2 || '0'),
-          change: String(item.f4 || '0'),
-          changePercent: String(item.f3 || '0'),
-          oneYearReturn: String(item.f6 || '0'),
-          pe: String(item.f25 || '0'),
-          pb: String(item.f26 || '0'),
-        }));
+      if (data && data.data) {
+        if (data.data.total) {
+          total = Number(data.data.total);
+        }
+
+        if (data.data.diff) {
+          const pageData = data.data.diff.map((item: Record<string, unknown>) => ({
+            code: String(item.f12 || ''),
+            name: String(item.f14 || ''),
+            fullName: String(item.f14 || ''),
+            fundCompany: '东方财富',
+            establishDate: '',
+            scale: String(item.f23 || '0'),
+            trackingIndex: '',
+            nav: String(item.f2 || '0'),
+            change: String(item.f4 || '0'),
+            changePercent: String(item.f3 || '0'),
+            oneYearReturn: String(item.f6 || '0'),
+            pe: String(item.f25 || '0'),
+            pb: String(item.f26 || '0'),
+          }));
+          allData.push(...pageData);
+        }
       }
-    } catch (error) {
-      console.error('EastMoney API request failed:', error);
+
+      pageNum++;
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    return this.getMockEastMoneyData();
+    return allData;
   }
 
   private async fetchEastMoneyETFDetail(code: string): Promise<ETFDetailResponse> {
@@ -197,10 +248,10 @@ export class EastMoneyDataSource implements DataSource {
   }
 
   private mapCategory(code: string): ETFCategory {
-    const broadCodes = ['510050', '510300', '510500', '159919', '159920', '510180', '510900'];
-    const industryCodes = ['512880', '512100', '512010', '512200', '512800', '512690', '512500', '512400', '512300'];
-    const crossBorderCodes = ['513100', '513500', '513050', '513300', '513130', '513030', '159601', '159603'];
-    const bondCodes = ['511260', '511010'];
+    const broadCodes = ['510050', '510300', '510500', '159919', '159920', '510180', '510900', '510330', '510650', '510680', '510760', '159901', '159902', '159949', '159967', '159985'];
+    const industryCodes = ['512880', '512100', '512010', '512200', '512800', '512690', '512500', '512400', '512300', '512660', '512670', '512680', '512760', '512850', '512890', '512930', '512960', '512980'];
+    const crossBorderCodes = ['513100', '513500', '513050', '513300', '513130', '513030', '159601', '159603', '513010', '513600', '513700', '513800', '513900', '159621', '159631', '159633'];
+    const bondCodes = ['511260', '511010', '511210', '511220', '511230', '511360', '511500', '511660', '511700', '511800', '511880', '511990'];
 
     if (broadCodes.includes(code)) return 'broad';
     if (industryCodes.includes(code)) return 'industry';

@@ -12,11 +12,16 @@ interface SinaETFData {
 }
 
 const ETF_CODES = [
-  'sh510050', 'sh510300', 'sh510500', 'sz159919', 'sz159920', 'sh512880', 'sh513100',
-  'sz159915', 'sz159934', 'sh512690', 'sh510880', 'sz159901', 'sz159902', 'sh510180',
-  'sh512500', 'sh512400', 'sh512300', 'sz159995', 'sz159949', 'sh513500', 'sh513050',
-  'sz159601', 'sz159603', 'sh513300', 'sh510900', 'sh512100', 'sh512010', 'sz159967',
-  'sh513130', 'sz159959', 'sh512200', 'sh512800', 'sh510650', 'sz159985', 'sh513030',
+  'sh510050', 'sh510300', 'sh510500', 'sh510180', 'sh510880', 'sh510900', 'sh510330', 'sh510650', 'sh510680', 'sh510760',
+  'sz159919', 'sz159920', 'sz159915', 'sz159901', 'sz159902', 'sz159949', 'sz159967', 'sz159985', 'sz159992', 'sz159995',
+  'sz159996', 'sz159934', 'sz159959', 'sz159601', 'sz159603', 'sz159621', 'sz159631', 'sz159633', 'sz159707', 'sz159748',
+  'sh512880', 'sh512690', 'sh512500', 'sh512400', 'sh512300', 'sh512100', 'sh512010', 'sh512200', 'sh512800', 'sh512980',
+  'sh512660', 'sh512670', 'sh512680', 'sh512760', 'sh512850', 'sh512890', 'sh512930', 'sh512960', 'sh513010', 'sh513030',
+  'sh513050', 'sh513100', 'sh513130', 'sh513300', 'sh513500', 'sh513600', 'sh513700', 'sh513800', 'sh513900', 'sh515000',
+  'sh515030', 'sh515050', 'sh515080', 'sh515100', 'sh515200', 'sh515220', 'sh515300', 'sh515500', 'sh515600', 'sh515700',
+  'sh515790', 'sh515800', 'sh515850', 'sh515880', 'sh515900', 'sh515950', 'sh516000', 'sh516100', 'sh516200', 'sh516300',
+  'sh516500', 'sh516600', 'sh516700', 'sh516800', 'sh516900', 'sh518880', 'sh518890', 'sh518980', 'sh511260', 'sh511010',
+  'sh511210', 'sh511220', 'sh511230', 'sh511360', 'sh511500', 'sh511660', 'sh511700', 'sh511800', 'sh511880', 'sh511990',
 ];
 
 export class SinaDataSource implements DataSource {
@@ -211,10 +216,10 @@ export class SinaDataSource implements DataSource {
   }
 
   private mapCategory(code: string): ETFCategory {
-    const broadCodes = ['510050', '510300', '510500', '159919', '159920', '510180', '510900'];
-    const industryCodes = ['512880', '512100', '512010', '512200', '512800', '512690', '512500', '512400', '512300'];
-    const crossBorderCodes = ['513100', '513500', '513050', '513300', '513130', '513030', '159601', '159603'];
-    const bondCodes = ['511260', '511010'];
+    const broadCodes = ['510050', '510300', '510500', '159919', '159920', '510180', '510900', '510330', '510650', '510680', '510760', '159901', '159902', '159949', '159967', '159985'];
+    const industryCodes = ['512880', '512100', '512010', '512200', '512800', '512690', '512500', '512400', '512300', '512660', '512670', '512680', '512760', '512850', '512890', '512930', '512960', '512980'];
+    const crossBorderCodes = ['513100', '513500', '513050', '513300', '513130', '513030', '159601', '159603', '513010', '513600', '513700', '513800', '513900', '159621', '159631', '159633'];
+    const bondCodes = ['511260', '511010', '511210', '511220', '511230', '511360', '511500', '511660', '511700', '511800', '511880', '511990'];
 
     if (broadCodes.includes(code)) return 'broad';
     if (industryCodes.includes(code)) return 'industry';
@@ -240,14 +245,16 @@ export class SinaDataSource implements DataSource {
       { symbol: 'sh510300', name: '沪深300ETF', price: '4.125', change: '-0.008', changePercent: '-0.19', volume: '98540000', turnover: '4065432' },
       { symbol: 'sh510500', name: '中证500ETF', price: '6.856', change: '0.023', changePercent: '0.34', volume: '67890000', turnover: '4654321' },
       { symbol: 'sz159919', name: '沪深300ETF', price: '4.118', change: '-0.010', changePercent: '-0.24', volume: '87650000', turnover: '3606789' },
+      { symbol: 'sz159920', name: '沪深300ETF', price: '4.120', change: '-0.005', changePercent: '-0.12', volume: '65430000', turnover: '2695860' },
       { symbol: 'sh512880', name: '证券ETF', price: '1.123', change: '0.005', changePercent: '0.45', volume: '156780000', turnover: '1759876' },
       { symbol: 'sh513100', name: '纳指ETF', price: '1.890', change: '0.025', changePercent: '1.34', volume: '45670000', turnover: '8631630' },
       { symbol: 'sz159915', name: '创业板ETF', price: '2.345', change: '0.015', changePercent: '0.64', volume: '78900000', turnover: '1849225' },
-      { symbol: 'sh510880', name: '红利ETF', price: '2.890', change: '0.008', changePercent: '0.28', volume: '34560000', turnover: '9987840' },
       { symbol: 'sz159934', name: '黄金ETF', price: '4.567', change: '0.032', changePercent: '0.70', volume: '23450000', turnover: '10703455' },
       { symbol: 'sh512690', name: '酒ETF', price: '1.234', change: '-0.006', changePercent: '-0.48', volume: '56780000', turnover: '6996652' },
+      { symbol: 'sh510880', name: '红利ETF', price: '2.890', change: '0.008', changePercent: '0.28', volume: '34560000', turnover: '9987840' },
       { symbol: 'sz159901', name: '深证100ETF', price: '5.678', change: '0.018', changePercent: '0.32', volume: '45670000', turnover: '25916406' },
       { symbol: 'sz159902', name: '中小板ETF', price: '3.456', change: '-0.005', changePercent: '-0.14', volume: '23450000', turnover: '8099780' },
+      { symbol: 'sh510180', name: '上证180ETF', price: '6.789', change: '0.020', changePercent: '0.30', volume: '23450000', turnover: '1590255' },
       { symbol: 'sh512500', name: '银行ETF', price: '1.023', change: '0.003', changePercent: '0.30', volume: '89010000', turnover: '9105723' },
       { symbol: 'sh512400', name: '券商ETF', price: '1.156', change: '0.008', changePercent: '0.70', volume: '76540000', turnover: '8848924' },
       { symbol: 'sh512300', name: '医药ETF', price: '0.987', change: '-0.002', changePercent: '-0.20', volume: '65430000', turnover: '6468941' },
@@ -256,6 +263,19 @@ export class SinaDataSource implements DataSource {
       { symbol: 'sh513500', name: '日经ETF', price: '1.234', change: '-0.003', changePercent: '-0.24', volume: '12340000', turnover: '1522756' },
       { symbol: 'sh513050', name: '中概互联ETF', price: '1.678', change: '0.018', changePercent: '1.08', volume: '45670000', turnover: '7663426' },
       { symbol: 'sz159601', name: '纳斯达克ETF', price: '2.345', change: '0.045', changePercent: '1.95', volume: '34560000', turnover: '8105320' },
+      { symbol: 'sz159603', name: '纳斯达克ETF', price: '2.123', change: '0.038', changePercent: '1.82', volume: '23450000', turnover: '4978035' },
+      { symbol: 'sh513300', name: '标普500ETF', price: '2.678', change: '0.032', changePercent: '1.21', volume: '23450000', turnover: '6282920' },
+      { symbol: 'sh510900', name: 'H股ETF', price: '1.567', change: '0.015', changePercent: '0.97', volume: '34560000', turnover: '5405950' },
+      { symbol: 'sh512100', name: '有色金属ETF', price: '1.345', change: '0.028', changePercent: '2.13', volume: '67890000', turnover: '9121520' },
+      { symbol: 'sh512010', name: '券商ETF', price: '1.234', change: '0.009', changePercent: '0.74', volume: '45670000', turnover: '5635680' },
+      { symbol: 'sz159967', name: '创成长ETF', price: '2.456', change: '0.035', changePercent: '1.45', volume: '34560000', turnover: '8407940' },
+      { symbol: 'sh513130', name: '纳指ETF', price: '2.123', change: '0.042', changePercent: '2.02', volume: '12340000', turnover: '2618160' },
+      { symbol: 'sz159959', name: '军工ETF', price: '1.456', change: '0.018', changePercent: '1.25', volume: '56780000', turnover: '8266168' },
+      { symbol: 'sh512200', name: '房地产ETF', price: '0.876', change: '-0.004', changePercent: '-0.45', volume: '34560000', turnover: '3037460' },
+      { symbol: 'sh512800', name: '银行ETF', price: '1.123', change: '0.004', changePercent: '0.36', volume: '45670000', turnover: '5130741' },
+      { symbol: 'sh510650', name: '沪深300ETF', price: '1.890', change: '-0.003', changePercent: '-0.16', volume: '23450000', turnover: '4432050' },
+      { symbol: 'sz159985', name: '科创50ETF', price: '1.234', change: '0.015', changePercent: '1.23', volume: '67890000', turnover: '8377626' },
+      { symbol: 'sh513030', name: '中概互联ETF', price: '1.567', change: '0.022', changePercent: '1.42', volume: '23450000', turnover: '3674115' },
     ];
   }
 
