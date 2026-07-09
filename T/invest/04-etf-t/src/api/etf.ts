@@ -115,6 +115,10 @@ export const clearCache = (): void => {
   LocalCache.clear();
 };
 
+export const clearCacheByPrefix = (prefix: string): void => {
+  LocalCache.clearByPrefix(prefix);
+};
+
 export const getCacheInfo = () => {
   return LocalCache.getCacheInfo();
 };

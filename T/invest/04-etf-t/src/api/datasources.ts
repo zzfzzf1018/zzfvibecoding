@@ -58,6 +58,14 @@ export class LocalCache {
     });
   }
 
+  static clearByPrefix(prefix: string): void {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith(this.PREFIX + prefix)) {
+        localStorage.removeItem(key);
+      }
+    });
+  }
+
   static getCacheInfo(): { keys: string[]; sizes: Record<string, number> } {
     const keys: string[] = [];
     const sizes: Record<string, number> = {};
