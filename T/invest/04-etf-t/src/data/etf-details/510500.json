@@ -1,0 +1,66 @@
+{
+  "basic": {
+    "code": "510500",
+    "name": "中证500ETF",
+    "fullName": "南方中证500ETF",
+    "fundCompany": "南方基金管理股份有限公司",
+    "establishDate": "2013-02-06",
+    "latestReportDate": "2024-03-31",
+    "scale": 345.67,
+    "scaleDate": "2024-03-31",
+    "trackingIndex": "中证500指数",
+    "indexCode": "000905",
+    "creationDate": "2013-02-06",
+    "managementFeeRate": 0.5,
+    "custodianFeeRate": 0.1,
+    "salesServiceFeeRate": 0
+  },
+  "holdings": [
+    {"rank": 1, "stockCode": "002415", "stockName": "海康威视", "weight": 1.89, "marketValue": 6.53, "changePercent": 2.34},
+    {"rank": 2, "stockCode": "002594", "stockName": "比亚迪", "weight": 1.76, "marketValue": 6.09, "changePercent": 4.56},
+    {"rank": 3, "stockCode": "000001", "stockName": "平安银行", "weight": 1.65, "marketValue": 5.70, "changePercent": 1.34},
+    {"rank": 4, "stockCode": "002304", "stockName": "洋河股份", "weight": 1.54, "marketValue": 5.32, "changePercent": 2.15},
+    {"rank": 5, "stockCode": "600276", "stockName": "恒瑞医药", "weight": 1.43, "marketValue": 4.94, "changePercent": 3.21},
+    {"rank": 6, "stockCode": "000858", "stockName": "五粮液", "weight": 1.32, "marketValue": 4.56, "changePercent": 2.15},
+    {"rank": 7, "stockCode": "601318", "stockName": "中国平安", "weight": 1.21, "marketValue": 4.18, "changePercent": 1.56},
+    {"rank": 8, "stockCode": "000651", "stockName": "格力电器", "weight": 1.10, "marketValue": 3.80, "changePercent": 1.89},
+    {"rank": 9, "stockCode": "002230", "stockName": "科大讯飞", "weight": 0.98, "marketValue": 3.39, "changePercent": 5.67},
+    {"rank": 10, "stockCode": "600519", "stockName": "贵州茅台", "weight": 0.87, "marketValue": 3.01, "changePercent": 2.34}
+  ],
+  "fees": {
+    "managementFee": 0.5,
+    "custodianFee": 0.1,
+    "salesServiceFee": 0,
+    "subscriptionFee": 0,
+    "redemptionFee": 0,
+    "managementFeeRate": "0.50%",
+    "custodianFeeRate": "0.10%",
+    "salesServiceFeeRate": "0.00%"
+  },
+  "dividends": [
+    {"dividendDate": "2024-01-17", "exDividendDate": "2024-01-14", "dividendAmount": 0.185, "dividendType": "现金分红", "recordDate": "2024-01-16"},
+    {"dividendDate": "2023-07-22", "exDividendDate": "2023-07-19", "dividendAmount": 0.145, "dividendType": "现金分红", "recordDate": "2023-07-21"},
+    {"dividendDate": "2023-01-20", "exDividendDate": "2023-01-17", "dividendAmount": 0.168, "dividendType": "现金分红", "recordDate": "2023-01-19"},
+    {"dividendDate": "2022-07-24", "exDividendDate": "2022-07-21", "dividendAmount": 0.128, "dividendType": "现金分红", "recordDate": "2022-07-23"},
+    {"dividendDate": "2022-01-21", "exDividendDate": "2022-01-18", "dividendAmount": 0.158, "dividendType": "现金分红", "recordDate": "2022-01-20"}
+  ],
+  "valuation": {
+    "pe": 22.34,
+    "pePercentile": 65.7,
+    "pb": 2.45,
+    "pbPercentile": 58.9,
+    "ps": 3.23,
+    "psPercentile": 62.1,
+    "earningsYield": 4.48,
+    "dividendYield": 2.15
+  },
+  "quantiles": [
+    {"date": "2024-01", "pe": 19.85, "pePercentile": 52.5, "pb": 2.12, "pbPercentile": 45.6},
+    {"date": "2024-02", "pe": 20.78, "pePercentile": 58.7, "pb": 2.25, "pbPercentile": 51.2},
+    {"date": "2024-03", "pe": 21.34, "pePercentile": 61.8, "pb": 2.32, "pbPercentile": 54.7},
+    {"date": "2024-04", "pe": 21.89, "pePercentile": 64.2, "pb": 2.38, "pbPercentile": 57.1},
+    {"date": "2024-05", "pe": 22.34, "pePercentile": 65.7, "pb": 2.45, "pbPercentile": 58.9},
+    {"date": "2024-06", "pe": 22.89, "pePercentile": 68.5, "pb": 2.52, "pbPercentile": 61.8},
+    {"date": "2024-07", "pe": 23.12, "pePercentile": 70.1, "pb": 2.56, "pbPercentile": 63.4}
+  ]
+}
