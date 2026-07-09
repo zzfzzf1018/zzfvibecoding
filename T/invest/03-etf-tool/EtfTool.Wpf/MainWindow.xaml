@@ -14,7 +14,7 @@
                      WindowStartupLocation="CenterScreen">
 
     <Window.DataContext>
-        <vm:MainViewModel />
+        <Binding Path="MainViewModel" Source="{StaticResource Locator}" />
     </Window.DataContext>
 
     <Grid>
@@ -45,7 +45,7 @@
                     IsEnabled="{Binding !IsLoading}"
                     Style="{DynamicResource AccentedSquareButtonStyle}">
                 <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconMaterial Kind="Search" Width="16" Height="16" />
+                    <iconPacks:PackIconMaterial Kind="Magnify" Width="16" Height="16" />
                     <TextBlock Text="搜索" Margin="5,0,0,0" />
                 </StackPanel>
             </Button>

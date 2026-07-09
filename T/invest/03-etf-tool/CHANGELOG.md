@@ -1,6 +1,18 @@
 
 # 大A ETF工具 - 改动记录
 
+## [1.0.1] - 2026-07-09
+
+### 修复
+
+- fix: 修复 XamlParseException，MainViewModel 无默认构造函数导致启动失败
+- fix: 添加 ViewModelLocator 实现依赖注入管理
+- fix: 修复 PackIconMaterialKind.Search 不存在问题，改为 Magnify
+
+### 更新
+
+- docs: 更新 AI 指导文档，添加 ViewModelLocator 使用说明
+
 ## [1.0.0] - 2026-07-09
 
 ### 新增

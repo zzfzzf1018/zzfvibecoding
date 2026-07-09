@@ -20,9 +20,9 @@ src/python/*.db
 src/python/*.pyc
 
 src/renderer/node_modules/
-src/renderer/dist/
+public/dist/
 
-.user_data/
+user_data/
 env/
 venv/
 

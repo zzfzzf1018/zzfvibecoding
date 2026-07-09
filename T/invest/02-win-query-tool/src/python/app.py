@@ -10,18 +10,14 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-akshare_available = True
-try:
-    import akshare as ak
-    
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    })
-    ak.requests_session = session
-    session.timeout = 30
-except ImportError:
-    akshare_available = False
+from data_sources import (
+    data_source_factory,
+    get_all_data_sources,
+    get_current_data_source,
+    set_data_source
+)
+
+akshare_available = data_source_factory.is_available()
 
 from cache import set_cache, get_cache, clear_cache, clear_expired_cache, get_cache_stats
 
@@ -41,6 +37,22 @@ def retry_with_backoff(func, max_retries=5, delay=2):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'success': True, 'akshare_available': akshare_available})
+
+@app.route('/api/data_source/list', methods=['GET'])
+def list_data_sources():
+    sources = get_all_data_sources()
+    current = get_current_data_source()
+    return jsonify({'success': True, 'data': sources, 'current': current})
+
+@app.route('/api/data_source/switch', methods=['POST'])
+def switch_data_source():
+    data = request.get_json()
+    source_id = data.get('source_id', '')
+    
+    if set_data_source(source_id):
+        return jsonify({'success': True, 'message': f'已切换到 {source_id} 数据源'})
+    else:
+        return jsonify({'success': False, 'error': '无效的数据源ID'})
 
 @app.route('/api/cache/stats', methods=['GET'])
 def cache_stats():
@@ -90,7 +102,7 @@ def search_stock():
     if not akshare_available:
         return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
     
-    cache_params = {'keyword': keyword, 'market': market}
+    cache_params = {'keyword': keyword, 'market': market, 'source': get_current_data_source()}
     cached_data = get_cache('stock_search', cache_params)
     
     try:
@@ -99,32 +111,36 @@ def search_stock():
         
         if market == 'all' or market == 'cn':
             try:
-                stock_info = retry_with_backoff(lambda: ak.stock_info_a_code_name())
-                if stock_info is not None and not stock_info.empty:
-                    matched = stock_info[stock_info['code'].str.contains(keyword) | stock_info['name'].str.contains(keyword)]
-                    for _, row in matched.head(20).iterrows():
-                        results.append({
-                            'code': row['code'],
-                            'name': row['name'],
-                            'market': 'cn',
-                            'full_code': f"{row['code']}.SH" if row['code'].startswith('6') else f"{row['code']}.SZ"
-                        })
+                stock_search_func = data_source_factory.get_stock_search_cn()
+                if stock_search_func:
+                    stock_info = retry_with_backoff(lambda: stock_search_func())
+                    if stock_info is not None and not stock_info.empty:
+                        matched = stock_info[stock_info['code'].str.contains(keyword) | stock_info['name'].str.contains(keyword)]
+                        for _, row in matched.head(20).iterrows():
+                            results.append({
+                                'code': row['code'],
+                                'name': row['name'],
+                                'market': 'cn',
+                                'full_code': f"{row['code']}.SH" if row['code'].startswith('6') else f"{row['code']}.SZ"
+                            })
             except Exception as e:
                 print(f"CN stock search failed, using fallback: {e}", file=sys.stderr)
                 use_fallback = True
         
         if market == 'all' or market == 'hk':
             try:
-                hk_stocks = retry_with_backoff(lambda: ak.stock_hk_spot_em())
-                if hk_stocks is not None and not hk_stocks.empty:
-                    matched = hk_stocks[hk_stocks['代码'].astype(str).str.contains(keyword) | hk_stocks['名称'].str.contains(keyword)]
-                    for _, row in matched.head(20).iterrows():
-                        results.append({
-                            'code': str(row['代码']),
-                            'name': row['名称'],
-                            'market': 'hk',
-                            'full_code': f"{row['代码']}.HK"
-                        })
+                hk_search_func = data_source_factory.get_stock_search_hk()
+                if hk_search_func:
+                    hk_stocks = retry_with_backoff(lambda: hk_search_func())
+                    if hk_stocks is not None and not hk_stocks.empty:
+                        matched = hk_stocks[hk_stocks['代码'].astype(str).str.contains(keyword) | hk_stocks['名称'].str.contains(keyword)]
+                        for _, row in matched.head(20).iterrows():
+                            results.append({
+                                'code': str(row['代码']),
+                                'name': row['名称'],
+                                'market': 'hk',
+                                'full_code': f"{row['代码']}.HK"
+                            })
             except Exception as e:
                 print(f"HK stock search failed, using fallback: {e}", file=sys.stderr)
                 use_fallback = True
@@ -175,21 +191,33 @@ def get_finance_report():
     if not akshare_available:
         return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
     
-    cache_params = {'symbol': symbol, 'type': report_type}
+    cache_params = {'symbol': symbol, 'type': report_type, 'source': get_current_data_source()}
     cached_data = get_cache('finance_report', cache_params)
     
     try:
         if symbol.endswith('.SH') or symbol.endswith('.SZ'):
             code = symbol[:-3]
             
-            if report_type == 'balance':
-                df = retry_with_backoff(lambda: ak.stock_financial_analysis_indicator(symbol=code))
-            elif report_type == 'income':
-                df = retry_with_backoff(lambda: ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
-            elif report_type == 'cash':
-                df = retry_with_backoff(lambda: ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
+            finance_report_func = data_source_factory.get_finance_report_cn(report_type)
+            if finance_report_func:
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='income'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='cash'))
+                else:
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
+            
             else:
-                df = retry_with_backoff(lambda: ak.stock_financial_analysis_indicator(symbol=code))
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
+                else:
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
             
             if df is not None and not df.empty:
                 df = df.dropna(axis=1, how='all')
@@ -205,14 +233,25 @@ def get_finance_report():
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
             
-            if report_type == 'balance':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
-            elif report_type == 'income':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
-            elif report_type == 'cash':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
+            finance_report_func = data_source_factory.get_finance_report_hk()
+            if finance_report_func:
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='综合收益表'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='现金流量表'))
+                else:
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
             else:
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
+                else:
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
             
             if df is not None and not df.empty:
                 df = df.dropna(axis=1, how='all')
@@ -249,15 +288,20 @@ def get_stock_analysis():
     if not akshare_available:
         return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
     
-    cache_params = {'symbol': symbol}
+    cache_params = {'symbol': symbol, 'source': get_current_data_source()}
     cached_data = get_cache('stock_analysis', cache_params)
     
     try:
         if symbol.endswith('.SH') or symbol.endswith('.SZ'):
             code = symbol[:-3]
             
-            stock_zh_a_indicator_df = retry_with_backoff(lambda: ak.stock_zh_a_indicator(symbol=f"{code}.SH"))
-            stock_financial_analysis_indicator_df = retry_with_backoff(lambda: ak.stock_financial_analysis_indicator(symbol=code))
+            analysis_func = data_source_factory.get_stock_analysis_cn()
+            if analysis_func:
+                stock_zh_a_indicator_df = retry_with_backoff(lambda: analysis_func(symbol=f"{code}.SH"))
+            else:
+                stock_zh_a_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_zh_a_indicator(symbol=f"{code}.SH"))
+            
+            stock_financial_analysis_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
             
             pe = stock_zh_a_indicator_df.get('市盈率', np.nan)
             pb = stock_zh_a_indicator_df.get('市净率', np.nan)
@@ -296,7 +340,11 @@ def get_stock_analysis():
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
             
-            stock_hk_indicator_df = retry_with_backoff(lambda: ak.stock_hk_indicator(symbol=f"{code}.HK"))
+            hk_analysis_func = data_source_factory.get_stock_analysis_hk()
+            if hk_analysis_func:
+                stock_hk_indicator_df = retry_with_backoff(lambda: hk_analysis_func(symbol=f"{code}.HK"))
+            else:
+                stock_hk_indicator_df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_indicator(symbol=f"{code}.HK"))
             
             pe = stock_hk_indicator_df.get('市盈率', np.nan)
             pb = stock_hk_indicator_df.get('市净率', np.nan)
@@ -351,26 +399,48 @@ def download_report():
         if symbol.endswith('.SH') or symbol.endswith('.SZ'):
             code = symbol[:-3]
             
-            if report_type == 'balance':
-                df = retry_with_backoff(lambda: ak.stock_financial_analysis_indicator(symbol=code))
-            elif report_type == 'income':
-                df = retry_with_backoff(lambda: ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
-            elif report_type == 'cash':
-                df = retry_with_backoff(lambda: ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
+            finance_report_func = data_source_factory.get_finance_report_cn(report_type)
+            if finance_report_func:
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='income'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code, symbol_type='main', report_type='cash'))
+                else:
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=code))
             else:
-                df = retry_with_backoff(lambda: ak.stock_financial_analysis_indicator(symbol=code))
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='income'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(symbol=code, symbol_type='main', report_type='cash'))
+                else:
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_analysis_indicator(symbol=code))
         
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
             
-            if report_type == 'balance':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
-            elif report_type == 'income':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
-            elif report_type == 'cash':
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
+            finance_report_func = data_source_factory.get_finance_report_hk()
+            if finance_report_func:
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='综合收益表'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='现金流量表'))
+                else:
+                    df = retry_with_backoff(lambda: finance_report_func(symbol=f"{code}.HK", indicator='资产负债表'))
             else:
-                df = retry_with_backoff(lambda: ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                if report_type == 'balance':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
+                elif report_type == 'income':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='综合收益表'))
+                elif report_type == 'cash':
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='现金流量表'))
+                else:
+                    df = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_financial_report(symbol=f"{code}.HK", indicator='资产负债表'))
         
         else:
             return jsonify({'success': False, 'error': 'Invalid symbol format'})
@@ -398,14 +468,19 @@ def get_prospectus():
     if not akshare_available:
         return jsonify({'success': False, 'error': 'akshare未安装，请先安装依赖'})
     
-    cache_params = {'symbol': symbol}
+    cache_params = {'symbol': symbol, 'source': get_current_data_source()}
     cached_data = get_cache('prospectus', cache_params)
     
     try:
         if symbol.endswith('.SH') or symbol.endswith('.SZ'):
             code = symbol[:-3]
             
-            prospectus_data = retry_with_backoff(lambda: ak.stock_new_stock_em())
+            prospectus_func = data_source_factory.get_prospectus_cn()
+            if prospectus_func:
+                prospectus_data = retry_with_backoff(lambda: prospectus_func())
+            else:
+                prospectus_data = retry_with_backoff(lambda: data_source_factory.ak.stock_new_stock_em())
+            
             prospectus_data = prospectus_data[prospectus_data['申购代码'].astype(str).str.contains(code) | 
                                               prospectus_data['证券简称'].str.contains(code)]
             
@@ -425,7 +500,12 @@ def get_prospectus():
         elif symbol.endswith('.HK'):
             code = symbol[:-3]
             
-            hk_prospectus = retry_with_backoff(lambda: ak.stock_hk_new_stock())
+            hk_prospectus_func = data_source_factory.get_prospectus_hk()
+            if hk_prospectus_func:
+                hk_prospectus = retry_with_backoff(lambda: hk_prospectus_func())
+            else:
+                hk_prospectus = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_new_stock())
+            
             hk_prospectus = hk_prospectus[hk_prospectus['代码'].astype(str).str.contains(code) | 
                                          hk_prospectus['名称'].str.contains(code)]
             
@@ -443,7 +523,12 @@ def get_prospectus():
                 return jsonify({'success': True, 'data': results, 'cached': False})
         
         else:
-            prospectus_data = retry_with_backoff(lambda: ak.stock_new_stock_em())
+            prospectus_func = data_source_factory.get_prospectus_cn()
+            if prospectus_func:
+                prospectus_data = retry_with_backoff(lambda: prospectus_func())
+            else:
+                prospectus_data = retry_with_backoff(lambda: data_source_factory.ak.stock_new_stock_em())
+            
             prospectus_data = prospectus_data[prospectus_data['申购代码'].astype(str).str.contains(symbol) | 
                                               prospectus_data['证券简称'].str.contains(symbol)]
             
@@ -460,7 +545,12 @@ def get_prospectus():
                 set_cache('prospectus', cache_params, results)
                 return jsonify({'success': True, 'data': results, 'cached': False})
             
-            hk_prospectus = retry_with_backoff(lambda: ak.stock_hk_new_stock())
+            hk_prospectus_func = data_source_factory.get_prospectus_hk()
+            if hk_prospectus_func:
+                hk_prospectus = retry_with_backoff(lambda: hk_prospectus_func())
+            else:
+                hk_prospectus = retry_with_backoff(lambda: data_source_factory.ak.stock_hk_new_stock())
+            
             hk_prospectus = hk_prospectus[hk_prospectus['代码'].astype(str).str.contains(symbol) | 
                                          hk_prospectus['名称'].str.contains(symbol)]
             
