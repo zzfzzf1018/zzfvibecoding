@@ -104,7 +104,8 @@ export class TencentDataSource implements DataSource {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       });
-      const text = await response.text();
+      const arrayBuffer = await response.arrayBuffer();
+      const text = new TextDecoder('GBK').decode(arrayBuffer);
 
       return this.parseTencentData(text);
     } catch {
@@ -158,7 +159,8 @@ export class TencentDataSource implements DataSource {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       });
-      const text = await response.text();
+      const arrayBuffer = await response.arrayBuffer();
+      const text = new TextDecoder('GBK').decode(arrayBuffer);
       const data = this.parseTencentData(text);
 
       if (data.length > 0) {
