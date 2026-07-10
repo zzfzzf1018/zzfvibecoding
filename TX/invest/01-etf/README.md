@@ -31,6 +31,26 @@ python -m uvicorn main:app --reload
 > `C:\Users\zzf\.workbuddy\binaries\python\versions\3.14.3\python.exe`）。
 > 首次访问会建表（SQLite `etf.db`）；数据需先运行 `refresh_*` 或访问接口触发自采。
 
+## 一键运行（推荐）
+无需手动装依赖，脚本自动装运行时依赖并启动：
+
+```bash
+# 跨平台（Python 启动器）
+python run.py                 # 装依赖 + 启动 + 自动打开浏览器
+python run.py --seed          # 启动前先播种 ETF 列表（让名称搜索可用，需联网）
+python run.py --port 8080 --no-browser
+python run.py --dev            # 热重载
+
+# Windows / PowerShell
+.\scripts\run.ps1              # 同上，自动选用 CodeBuddy 内置 Python
+.\scripts\run.ps1 -Seed        # 启动前播种 ETF 列表
+```
+
+`run.py` / `run.ps1` 会：① 解析 Python（默认 CodeBuddy 内置，可用 `-Python` 或 `ETF_PYTHON` 覆盖）；
+② `pip` 安装运行时依赖（`requirements-runtime.txt`，akshare 安装失败则降级到中证/东财兜底源）；
+③ 可选 `--seed` 调用 `refresh_etf_basic` 播种基础列表；④ 启动 `uvicorn main:app` 并打开浏览器。
+运行入口在 `src/` 目录（`from app...` 导入要求），故脚本内部已 `cd src` 并使用 `main:app` 模块路径。
+
 ## 数据源与多源降级
 估值/成分股依次尝试：**AkShare（主）→ 中证官网（兜底）→ 东方财富（兜底）**。
 任一源解析失败返回 `None`，由 `ValuationService` 自动降级到下一个源，保证主流程不中断。
