@@ -343,8 +343,6 @@ def get_finance_report():
 def get_stock_analysis():
     symbol = request.args.get('symbol', '')
     
-    print(f"DEBUG: analysis called with symbol={symbol}", file=sys.stderr)
-    
     cache_params = {'symbol': symbol, 'source': get_current_data_source()}
     cached_data = get_cache('stock_analysis', cache_params)
     
@@ -404,19 +402,37 @@ def get_stock_analysis():
                 set_cache('stock_analysis', cache_params, analysis_data)
                 return jsonify({'success': True, 'data': analysis_data, 'cached': False})
         
-        if akshare_available and symbol.endswith('.SH') or symbol.endswith('.SZ'):
+        if akshare_available and (symbol.endswith('.SH') or symbol.endswith('.SZ')):
             code = symbol[:-3]
             stock_code = f"sh{code}" if symbol.endswith('.SH') else f"sz{code}"
             
             try:
                 df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='资产负债表'))
                 if df is not None and not df.empty:
-                    analysis_data['financial_ratios']['货币资金'] = df.get('货币资金', [None])[0] if len(df) > 0 else None
+                    if len(df) > 0:
+                        analysis_data['financial_ratios']['货币资金'] = df.iloc[0].get('货币资金')
+                        analysis_data['financial_ratios']['总资产'] = df.iloc[0].get('资产总计')
+                        analysis_data['financial_ratios']['总负债'] = df.iloc[0].get('负债合计')
+                        analysis_data['financial_ratios']['所有者权益合计'] = df.iloc[0].get('所有者权益(或股东权益)合计')
+                        analysis_data['financial_ratios']['总股本(万股)'] = df.iloc[0].get('实收资本(或股本)')
                     
                 df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='利润表'))
                 if df is not None and not df.empty:
-                    analysis_data['financial_ratios']['营业收入'] = df.get('营业收入', [None])[0] if len(df) > 0 else None
-                    analysis_data['financial_ratios']['净利润'] = df.get('净利润', [None])[0] if len(df) > 0 else None
+                    if len(df) > 0:
+                        analysis_data['financial_ratios']['营业收入'] = df.iloc[0].get('营业收入')
+                        analysis_data['financial_ratios']['净利润'] = df.iloc[0].get('净利润')
+                        analysis_data['financial_ratios']['基本每股收益'] = df.iloc[0].get('基本每股收益')
+                        
+                        revenue = df.iloc[0].get('营业收入')
+                        profit = df.iloc[0].get('净利润')
+                        if revenue and profit and float(revenue) > 0:
+                            analysis_data['financial_ratios']['净利率'] = round(float(profit) / float(revenue) * 100, 2)
+                    
+                df = retry_with_backoff(lambda: data_source_factory.ak.stock_financial_report_sina(stock=stock_code, symbol='现金流量表'))
+                if df is not None and not df.empty:
+                    if len(df) > 0:
+                        analysis_data['financial_ratios']['经营活动产生的现金流量净额'] = df.iloc[0].get('经营活动产生的现金流量净额')
+            
             except Exception as e:
                 print(f"akshare analysis API failed: {e}", file=sys.stderr)
         
@@ -432,6 +448,14 @@ def get_stock_analysis():
             except Exception as e:
                 print(f"HK Analysis API failed: {e}", file=sys.stderr)
         
+        has_data = analysis_data['valuation']['pe'] is not None or \
+                   analysis_data['valuation']['pb'] is not None or \
+                   len(analysis_data['financial_ratios']) > 0
+        
+        if has_data:
+            set_cache('stock_analysis', cache_params, analysis_data)
+            return jsonify({'success': True, 'data': analysis_data, 'cached': False})
+        
         if cached_data:
             return jsonify({'success': True, 'data': cached_data, 'cached': True, 'warning': '当前数据源无数据，显示缓存数据'})
         
@@ -439,18 +463,13 @@ def get_stock_analysis():
     
     except Exception as e:
         import traceback
-        import sys
         print(f"Stock analysis error: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-        
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        line_num = exc_tb.tb_lineno
         
         if cached_data:
             return jsonify({'success': True, 'data': cached_data, 'cached': True, 'warning': '网络异常，显示缓存数据'})
         
-        return jsonify({'success': False, 'error': f'网络请求失败: {str(e)} (文件: {fname}, 行号: {line_num})'})
+        return jsonify({'success': False, 'error': f'网络请求失败: {str(e)}'})
 
 @app.route('/api/stock/download_report', methods=['GET'])
 def download_report():
@@ -544,38 +563,49 @@ def get_prospectus():
             try:
                 prospectus_data = retry_with_backoff(api_func)
                 if prospectus_data is not None and not prospectus_data.empty:
-                    code_cols = ['申购代码', '代码', 'stock_code', 'code']
-                    name_cols = ['证券简称', '名称', 'stock_name', 'name']
-                    
-                    matched = None
-                    for col in code_cols:
-                        if col in prospectus_data.columns:
-                            matched = prospectus_data[prospectus_data[col].astype(str).str.contains(code)]
-                            if not matched.empty:
-                                break
-                    
-                    if matched is None or matched.empty:
-                        for col in name_cols:
+                    if 'item' in prospectus_data.columns:
+                        ipo_info = {}
+                        for _, row in prospectus_data.iterrows():
+                            ipo_info[row['item']] = row['value']
+                        results.append({
+                            'code': code,
+                            'name': ipo_info.get('股票简称', ''),
+                            'ipo_info': ipo_info
+                        })
+                        break
+                    else:
+                        code_cols = ['申购代码', '代码', 'stock_code', 'code']
+                        name_cols = ['证券简称', '名称', 'stock_name', 'name']
+                        
+                        matched = None
+                        for col in code_cols:
                             if col in prospectus_data.columns:
-                                matched = prospectus_data[prospectus_data[col].str.contains(code, na=False)]
+                                matched = prospectus_data[prospectus_data[col].astype(str).str.contains(code)]
                                 if not matched.empty:
                                     break
-                    
-                    if matched is not None and not matched.empty:
-                        for _, row in matched.head(10).iterrows():
-                            result_code = ''
-                            result_name = ''
-                            for col in code_cols:
-                                if col in row:
-                                    result_code = str(row[col])
-                                    break
+                        
+                        if matched is None or matched.empty:
                             for col in name_cols:
-                                if col in row:
-                                    result_name = row[col]
-                                    break
-                            
-                            results.append({
-                                'code': result_code,
+                                if col in prospectus_data.columns:
+                                    matched = prospectus_data[prospectus_data[col].str.contains(code, na=False)]
+                                    if not matched.empty:
+                                        break
+                        
+                        if matched is not None and not matched.empty:
+                            for _, row in matched.head(10).iterrows():
+                                result_code = ''
+                                result_name = ''
+                                for col in code_cols:
+                                    if col in row:
+                                        result_code = str(row[col])
+                                        break
+                                for col in name_cols:
+                                    if col in row:
+                                        result_name = row[col]
+                                        break
+                                
+                                results.append({
+                                    'code': result_code,
                                 'name': result_name,
                                 'ipo_date': row.get('上网发行日期', row.get('招股日期', row.get('发行日期', ''))),
                                 'prospectus_url': row.get('招股书链接', row.get('招股书', ''))

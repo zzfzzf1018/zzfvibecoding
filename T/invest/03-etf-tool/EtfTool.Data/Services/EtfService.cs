@@ -53,7 +53,28 @@ namespace EtfTool.Data.Services
 
         public async Task<List<EtfInfo>> SearchEtfAsync(string keyword)
         {
-            return await _currentProvider.SearchEtfAsync(keyword);
+            var localProvider = new Providers.LocalEtfDataProvider();
+            var localResults = await localProvider.SearchEtfAsync(keyword);
+            
+            if (localResults != null && localResults.Count > 0)
+            {
+                return localResults;
+            }
+            
+            var results = await _currentProvider.SearchEtfAsync(keyword);
+            
+            if (results == null || results.Count == 0)
+            {
+                var otherProvider = _providerFactory.GetProvider(
+                    CurrentDataSource == DataSource.EastMoney ? DataSource.Sina : DataSource.EastMoney);
+                var otherResults = await otherProvider.SearchEtfAsync(keyword);
+                if (otherResults != null && otherResults.Count > 0)
+                {
+                    results = otherResults;
+                }
+            }
+            
+            return results ?? new List<EtfInfo>();
         }
 
         public async Task<EtfStatistics> CalculateStatisticsAsync(string etfCode, int periodMonths = 36)
