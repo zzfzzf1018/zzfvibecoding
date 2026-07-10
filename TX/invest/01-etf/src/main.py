@@ -9,11 +9,13 @@ from fastapi.responses import JSONResponse
 
 from app.api import etf_router, valuation_router
 from app.core.errors import AppError
+from app.web import web_router
 
 app = FastAPI(title="中国股市 ETF 查询工具", version="1.0")
 
 app.include_router(etf_router)
 app.include_router(valuation_router)
+app.include_router(web_router)
 
 
 @app.get("/health")

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ETF 估值查询</title>
+<style>
+  :root{
+    --bg:#0f172a;--card:#1e293b;--accent:#38bdf8;--text:#e2e8f0;
+    --muted:#94a3b8;--green:#34d399;--red:#f87171;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--text);}
+  header{padding:16px 20px;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;}
+  header h1{margin:0;font-size:18px;}
+  .wrap{max-width:960px;margin:0 auto;padding:16px 20px 60px;}
+  .search{display:flex;gap:8px;margin:20px 0;}
+  .search input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid #334155;
+                background:#0b1220;color:var(--text);font-size:15px;}
+  .search button{padding:10px 18px;border:0;border-radius:8px;background:var(--accent);
+                 color:#06283d;font-weight:600;cursor:pointer;}
+  .results{display:flex;flex-direction:column;gap:6px;}
+  .res{padding:10px 12px;background:var(--card);border-radius:8px;cursor:pointer;border:1px solid transparent;}
+  .res:hover{border-color:var(--accent);}
+  .res .code{color:var(--accent);font-weight:600;margin-right:8px;}
+  .res .type{color:var(--muted);font-size:12px;margin-left:6px;}
+  .panel{margin-top:20px;background:var(--card);border-radius:12px;padding:16px;}
+  .section{margin-bottom:18px;}
+  .section h3{margin:0 0 8px;font-size:15px;color:var(--accent);border-left:3px solid var(--accent);padding-left:8px;}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:14px;}
+  .kv .k{color:var(--muted);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#334155;color:var(--text);}
+  .pe-low{color:var(--green);font-weight:700;}
+  .pe-high{color:var(--red);font-weight:700;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #334155;}
+  .muted{color:var(--muted);font-size:13px;}
+  .bar{height:8px;border-radius:4px;background:var(--accent);}
+  .hidden{display:none;}
+</style>
+</head>
+<body>
+<header><h1>中国股市 ETF 估值查询</h1></header>
+<div class="wrap">
+  <div class="search">
+    <input id="kw" placeholder="输入 ETF 代码（如 510300）或名称关键字（如 沪深300）"
+           onkeydown="if(event.key==='Enter')doSearch()" />
+    <button onclick="doSearch()">搜索</button>
+  </div>
+  <div id="results" class="results"></div>
+  <div id="panel" class="panel hidden"></div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+let currentCode = null;
+
+async function api(path){
+  const r = await fetch(path);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function doSearch(){
+  const kw = $('kw').value.trim();
+  if(!kw) return;
+  $('results').innerHTML = '<div class="muted">搜索中…</div>';
+  try{
+    const data = await api('/api/etf/search?keyword=' + encodeURIComponent(kw));
+    if(!data.length){ $('results').innerHTML = '<div class="muted">未找到匹配 ETF</div>'; return; }
+    $('results').innerHTML = data.map(e =>
+      `<div class="res" onclick="load('${e.code}')"><span class="code">${e.code}</span>${e.name||''}<span class="type">${e.type||''}</span></div>`
+    ).join('');
+  }catch(e){ $('results').innerHTML = '<div class="muted">搜索失败：' + e.message + '</div>'; }
+}
+
+async function load(code){
+  currentCode = code;
+  $('panel').classList.remove('hidden');
+  $('panel').innerHTML = '<div class="muted">加载中…</div>';
+  try{
+    const [basic, val, perc, cons, ind] = await Promise.all([
+      api(`/api/etf/${code}/basic`),
+      api(`/api/etf/${code}/valuation`).catch(() => ({applicable:false})),
+      api(`/api/etf/${code}/percentile?window=5y`).catch(() => null),
+      api(`/api/etf/${code}/constituents?top_n=20`).catch(() => []),
+      api(`/api/etf/${code}/constituents/industry`).catch(() => []),
+    ]);
+    render(basic, val, perc, cons, ind);
+  }catch(e){ $('panel').innerHTML = '<div class="muted">加载失败：' + e.message + '</div>'; }
+}
+
+const esc = (s) => (s == null ? '' : String(s));
+const pctClass = (p) => (p == null ? '' : (p <= 30 ? 'pe-low' : (p >= 70 ? 'pe-high' : '')));
+
+function render(basic, val, perc, cons, ind){
+  let h = `<div class="section"><h3>基本信息</h3><div class="kv">`;
+  const rows = [
+    ['代码', basic.code], ['名称', basic.name], ['类型', basic.type],
+    ['跟踪指数', basic.track_index], ['跟踪指数代码', basic.track_index_code],
+    ['基金公司', basic.fund_manager], ['基金经理', basic.manager],
+    ['规模(元)', basic.fund_scale], ['管理费(%)', basic.management_fee_rate],
+    ['托管费(%)', basic.custody_fee_rate], ['跟踪误差', basic.tracking_error],
+    ['成立日', basic.establish_date],
+  ];
+  rows.forEach(r => { if(r[1] != null) h += `<div class="k">${r[0]}</div><div>${esc(r[1])}</div>`; });
+  h += `</div></div>`;
+
+  h += `<div class="section"><h3>估值（PE/PB）</h3>`;
+  if(val && val.applicable){
+    h += `<div class="kv">
+      <div class="k">PE(TTM)</div><div>${esc(val.pe_ttm)}</div>
+      <div class="k">PB</div><div>${esc(val.pb)}</div>
+      <div class="k">股息率</div><div>${esc(val.dividend_yield)}</div>
+      <div class="k">估值日期</div><div>${esc(val.valuation_date)}</div>
+      <div class="k">数据来源</div><div><span class="badge">${esc(val.source)}</span></div>
+    </div>`;
+  } else {
+    h += `<div class="muted">${val && val.reason ? val.reason : '当前无估值数据'}</div>`;
+  }
+  h += `</div>`;
+
+  h += `<div class="section"><h3>历史分位（${perc ? perc.window : '-'}${perc && perc.degraded ? ' · 样本不足已降级' : ''}）</h3>`;
+  if(perc && perc.sample_count){
+    h += `<div class="kv">
+      <div class="k">样本数</div><div>${perc.sample_count}</div>
+      <div class="k">PE 分位</div><div class="${pctClass(perc.pe_percentile)}">${esc(perc.pe_percentile)}%</div>
+      <div class="k">PB 分位</div><div class="${pctClass(perc.pb_percentile)}">${esc(perc.pb_percentile)}%</div>
+      <div class="k">PE 区间</div><div>${esc(perc.pe_min)} ~ ${esc(perc.pe_max)}（中位 ${esc(perc.pe_median)}）</div>
+      <div class="k">PB 区间</div><div>${esc(perc.pb_min)} ~ ${esc(perc.pb_max)}（中位 ${esc(perc.pb_median)}）</div>
+    </div>`;
+  } else {
+    h += `<div class="muted">暂无历史分位数据（需先采集历史估值）</div>`;
+  }
+  h += `</div>`;
+
+  h += `<div class="section"><h3>成分股（前 ${cons ? cons.length : 0} 只）</h3><table>
+        <thead><tr><th>代码</th><th>名称</th><th>行业</th><th>权重(%)</th></tr></thead><tbody>`;
+  if(cons && cons.length){
+    cons.forEach(c => {
+      h += `<tr><td>${esc(c.stock_code)}</td><td>${esc(c.stock_name)}</td><td>${esc(c.sw_l1) || '—'}</td><td>${esc(c.weight)}</td></tr>`;
+    });
+  } else {
+    h += `<tr><td colspan="4" class="muted">暂无成分股</td></tr>`;
+  }
+  h += `</tbody></table></div>`;
+
+  if(ind && ind.length){
+    h += `<div class="section"><h3>行业分布</h3>`;
+    const max = Math.max(...ind.map(x => x.weight));
+    ind.slice(0, 10).forEach(x => {
+      const w = Math.max(2, Math.round(x.weight / max * 100));
+      h += `<div style="display:flex;gap:8px;align-items:center;margin:4px 0;">
+              <div style="width:120px;">${esc(x.industry)}</div>
+              <div style="flex:1;background:#0b1220;border-radius:4px;"><div class="bar" style="width:${w}%"></div></div>
+              <div style="width:70px;text-align:right;">${esc(x.weight)}</div>
+            </div>`;
+    });
+    h += `</div>`;
+  }
+
+  $('panel').innerHTML = h;
+}
+</script>
+</body>
+</html>

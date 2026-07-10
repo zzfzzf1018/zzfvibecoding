@@ -53,7 +53,7 @@ class Container:
         ]
 
         # 服务（仅依赖接口/仓储）
-        self.search_service = SearchService(self.etf_repo)
+        self.search_service = SearchService(self.etf_repo, self.basic_sources)
         self.valuation_service = ValuationService(
             self.etf_repo, self.valuation_repo, self.valuation_sources, self.basic_sources
         )

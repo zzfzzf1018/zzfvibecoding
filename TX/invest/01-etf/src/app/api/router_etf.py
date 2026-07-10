@@ -1,13 +1,13 @@
-"""ETF 检索/基本信息路由（FR-01/FR-02，骨架）。
+"""ETF 检索/基本信息路由（FR-01/FR-02）。
 
-未实现的方法返回 501；接口契约已对齐 SRS IR-02。
+接口契约对齐 SRS IR-02。
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import get_search_service
-from app.models.schemas import ETFSearchResult
+from app.models.schemas import EtfBasic, ETFSearchResult
 
 router = APIRouter(prefix="/api/etf", tags=["etf"])
 
@@ -25,7 +25,10 @@ def search(
         raise HTTPException(status_code=501, detail="功能未实现")
 
 
-@router.get("/{code}/basic", response_model=ETFSearchResult)
-def basic(code: str) -> ETFSearchResult:
-    # TODO(FR-02): 调用 SearchService/ValuationService 取基本信息
-    raise HTTPException(status_code=501, detail="功能未实现")
+@router.get("/{code}/basic", response_model=EtfBasic)
+def basic(code: str) -> EtfBasic:
+    svc = get_search_service()
+    try:
+        return svc.get_basic(code)
+    except NotImplementedError:
+        raise HTTPException(status_code=501, detail="功能未实现")

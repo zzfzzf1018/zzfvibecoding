@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from sqlalchemy import case, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.orm import EtfBasic as EtfBasicORM, EtfType

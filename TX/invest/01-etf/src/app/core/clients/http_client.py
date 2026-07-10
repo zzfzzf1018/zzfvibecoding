@@ -24,6 +24,10 @@ class HttpClient:
         self._interval = rate_limit_interval if rate_limit_interval is not None else settings.rate_limit_interval
         self._max_retries = max_retries
         self._last_call = 0.0
+        self._headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ETF-Tool/1.0",
+            "Accept": "application/json, text/plain, */*",
+        }
 
     def _throttle(self) -> None:
         elapsed = time.monotonic() - self._last_call
@@ -45,6 +49,23 @@ class HttpClient:
                 last_exc = exc
                 logger.warning("HTTP 请求失败 %s 第%d次: %s", url, attempt, exc)
         raise last_exc if last_exc else RuntimeError("http_client failed")
+
+
+    def post_json(self, url: str, json: dict | None = None, params: dict | None = None) -> dict:
+        """POST JSON 并返回 JSON；失败按指数退避重试。"""
+        last_exc: Exception | None = None
+        for attempt in range(1, self._max_retries + 1):
+            self._throttle()
+            try:
+                resp = requests.post(
+                    url, params=params, json=json, timeout=self._timeout, headers=self._headers
+                )
+                resp.raise_for_status()
+                return resp.json()
+            except requests.RequestException as exc:  # noqa: PERF203
+                last_exc = exc
+                logger.warning("HTTP POST 失败 %s 第%d次: %s", url, attempt, exc)
+        raise last_exc if last_exc else RuntimeError("http_client post failed")
 
 
 __all__ = ["HttpClient"]
