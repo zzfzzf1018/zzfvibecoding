@@ -16,9 +16,18 @@ api → services → (datasource.interfaces + repositories)
 ```bash
 python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-pytest                                         # 运行护栏测试（松耦合 + 接口一致性）
-uvicorn src.main:app --reload                  # 启动（未实现接口返回 501）
+
+# 测试（pyproject 已将 src 加入 pythonpath）
+pytest                                         # 护栏测试 + 服务单测
+
+# 启动后端（模块使用 `from app...`，需在 src 目录运行）
+cd src
+python -m uvicorn main:app --reload            # 打开 http://127.0.0.1:8000/docs
 ```
+
+> 注意：本机 `python` 若指向 Microsoft Store 占位程序，请使用真实 Python（如
+> `C:\Users\zzf\.workbuddy\binaries\python\versions\3.14.3\python.exe`）。
+> 首次访问会建表（SQLite `etf.db`）；数据需先运行 `refresh_*` 或访问接口触发自采。
 
 ## 接手开发顺序（建议）
 1. 按 `docs/数据源调研.md` 实现 `datasource/akshare_src.py` 各方法。

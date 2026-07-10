@@ -19,6 +19,7 @@ from app.datasource.csindex_src import (
     CsIndexValuationSource,
 )
 from app.datasource.em_src import EmValuationSource
+from app.models.orm import Base
 from app.repositories.constituent_repo import ConstituentRepo
 from app.repositories.etf_repo import EtfRepo
 from app.repositories.valuation_repo import ValuationRepo
@@ -31,6 +32,7 @@ from app.services.valuation_service import ValuationService
 class Container:
     def __init__(self) -> None:
         self.engine = create_engine(settings.database_url, future=True)
+        Base.metadata.create_all(self.engine)  # 确保表存在（幂等）
         self.Session = sessionmaker(bind=self.engine, future=True)
 
         # 仓储
@@ -53,11 +55,13 @@ class Container:
         # 服务（仅依赖接口/仓储）
         self.search_service = SearchService(self.etf_repo)
         self.valuation_service = ValuationService(
-            self.etf_repo, self.valuation_repo, self.valuation_sources
+            self.etf_repo, self.valuation_repo, self.valuation_sources, self.basic_sources
         )
-        self.percentile_service = PercentileService(self.etf_repo, self.valuation_repo)
+        self.percentile_service = PercentileService(
+            self.etf_repo, self.valuation_repo, self.basic_sources
+        )
         self.constituent_service = ConstituentService(
-            self.etf_repo, self.constituent_repo
+            self.etf_repo, self.constituent_repo, self.basic_sources
         )
 
 

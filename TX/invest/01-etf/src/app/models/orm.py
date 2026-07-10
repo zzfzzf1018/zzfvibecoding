@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
+from typing import Optional
 
 from sqlalchemy import Date, DateTime, Enum as SAEnum, Numeric, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column

@@ -1,4 +1,4 @@
-"""检索服务（FR-01，骨架/未实现）。
+"""检索服务（FR-01）。
 
 依赖 repositories（不依赖任何具体数据源）。详见软件详细设计说明书 §3.1。
 """
@@ -14,7 +14,8 @@ class SearchService:
 
     def search(self, keyword: str, page: int = 1, page_size: int = 50) -> list[ETFSearchResult]:
         """FR-01: 编号精确/名称模糊检索；空关键字返回空；分页。"""
-        raise NotImplementedError("SearchService.search 待实现")
-
-
-__all__ = ["SearchService"]
+        if not keyword:
+            return []
+        if keyword.isdigit():
+            return self._etf_repo.search_by_code(keyword, page, page_size)
+        return self._etf_repo.search_by_name(keyword, page, page_size)
