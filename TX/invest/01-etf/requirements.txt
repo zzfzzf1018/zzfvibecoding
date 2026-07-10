@@ -1,0 +1,27 @@
+# 中国股市 ETF 查询工具 — 依赖清单
+# 用途见 docs/数据源调研.md、docs/编码规范.md
+
+# Web 框架
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# ORM / 数据
+sqlalchemy>=2.0
+pydantic>=2.6
+pandas>=2.0
+
+# 数据源（主源）
+akshare>=1.13
+
+# 受控 HTTP（兜底源解析用）
+requests>=2.31
+
+# 定时任务
+apscheduler>=3.10
+
+# 开发/测试
+pytest>=8.0
+ruff>=0.4
+black>=24.0
+isort>=5.13
+mypy>=1.9

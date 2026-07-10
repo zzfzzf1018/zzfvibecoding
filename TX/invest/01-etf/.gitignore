@@ -1,0 +1,17 @@
+# 环境
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 密钥/配置
+.env
+*.db
+etf.db
+
+# 编辑器
+.idea/
+.vscode/
