@@ -1,18 +1,18 @@
 <#
 .SYNOPSIS
-  ETF 查询工具 —— 一键编译/运行（Windows / PowerShell）
+  ETF query tool - one-click build/run (Windows / PowerShell)
 
 .DESCRIPTION
-  1) 解析 Python（默认用 CodeBuddy 内置 Python；可用 -Python 覆盖，或设置环境变量 ETF_PYTHON）
-  2) 安装运行时依赖（akshare 安装失败则降级到中证/东财兜底源，仍可运行）
-  3) 可选 -Seed 播种 ETF 列表（让名称搜索可用，需联网）
-  4) 启动 uvicorn 并打开浏览器
+  1) Resolve Python (default: CodeBuddy bundled Python; override with -Python or env ETF_PYTHON)
+  2) Install runtime deps (akshare optional; falls back to csindex/em sources)
+  3) Optional -Seed to populate ETF list (enables name search, needs network)
+  4) Start uvicorn in the foreground and open the browser
 
 .EXAMPLE
-  .\scripts\run.ps1                 # 安装依赖 + 启动 + 打开浏览器
-  .\scripts\run.ps1 -Seed           # 启动前先播种 ETF 列表
+  .\scripts\run.ps1
+  .\scripts\run.ps1 -Seed
   .\scripts\run.ps1 -Port 8080 -NoBrowser
-  .\scripts\run.ps1 -Dev            # 热重载
+  .\scripts\run.ps1 -Dev
 #>
 [CmdletBinding()]
 param(
@@ -25,10 +25,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path   # scripts/
-$root = Split-Path -Parent $root                          # 项目根
+$root = Split-Path -Parent $root                          # project root
 $src  = Join-Path $root 'src'
 
-# 1) 解析 Python
+# 1) Resolve Python
 if ($Python) {
   $py = $Python
 } elseif ($env:ETF_PYTHON) {
@@ -37,46 +37,54 @@ if ($Python) {
   $wb = "$env:USERPROFILE\.workbuddy\binaries\python\versions\3.14.3\python.exe"
   if (Test-Path $wb) { $py = $wb }
   elseif (Get-Command python -ErrorAction SilentlyContinue) { $py = 'python' }
-  else { Write-Error "未找到 Python。请用 -Python 指定，或设置环境变量 ETF_PYTHON。"; exit 1 }
+  else { Write-Error "Python not found. Use -Python or set env ETF_PYTHON."; exit 1 }
 }
-Write-Host "==> 使用 Python: $py"
+Write-Host "==> Using Python: $py"
 & $py --version
 
-# 2) 安装运行时依赖
-Write-Host "==> 安装运行时基础依赖..."
+# 2) Install runtime dependencies
+Write-Host "==> Installing base runtime dependencies..."
 & $py -m pip install -q -r (Join-Path $root 'requirements-runtime.txt')
-if ($LASTEXITCODE -ne 0) { Write-Warning "部分基础依赖安装失败，请检查网络/Python 环境。" }
+if ($LASTEXITCODE -ne 0) { Write-Warning "Some base dependencies failed to install. Check network/Python." }
 
-Write-Host "==> 安装主数据源 akshare（失败则降级到中证/东财兜底源）..."
+Write-Host "==> Installing akshare (main data source; falls back if it fails)..."
 & $py -m pip install -q akshare
-if ($LASTEXITCODE -ne 0) { Write-Warning "akshare 安装失败：将仅使用中证/东财兜底源（需联网）。" }
+if ($LASTEXITCODE -ne 0) { Write-Warning "akshare install failed: will use csindex/em fallback sources only (needs network)." }
 
-# 3) 可选：播种 ETF 列表
+# 3) Optional: seed ETF list
 if ($Seed) {
-  Write-Host "==> 播种 ETF 基础列表（联网拉取，可能需要几十秒）..."
-  $seedCode = @"
-import sys; sys.path.insert(0, r'$src')
-from app.core.di import Container
-from app.scheduler.jobs import refresh_etf_basic
-refresh_etf_basic(Container())
-print('SEED_OK')
-"@
-  & $py -c $seedCode
+  Write-Host "==> Seeding ETF basic list (network fetch, may take tens of seconds)..."
+  $seedFile = Join-Path $root "scripts\_seed_tmp.py"
+  $lines = @(
+    "import os, sys",
+    "sys.path.insert(0, os.environ['SEED_SRC'])",
+    "from app.core.di import Container",
+    "from app.scheduler.jobs import refresh_etf_basic",
+    "refresh_etf_basic(Container())",
+    "print('SEED_OK')"
+  )
+  Set-Content -Path $seedFile -Value $lines -Encoding UTF8
+  $env:SEED_SRC = $src
+  & $py $seedFile
+  Remove-Item $seedFile -ErrorAction SilentlyContinue
 }
 
-# 4) 启动服务（需在 src 目录运行，app 包才可导入）
-Write-Host "==> 启动服务: http://localhost:$Port/  (Ctrl+C 退出)"
+# 4) Start service in the foreground (logs show in THIS window; closing it stops the service)
+#    Must run under src/ so the 'app' package is importable.
+Write-Host "==> Starting service: http://localhost:$Port/  (Ctrl+C to stop; close this window to stop)"
 $argList = @('-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', "$Port")
 if ($Dev) { $argList += '--reload' }
 
-$proc = Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $src -PassThru
+# Open browser after a short delay (does not block uvicorn logs)
 if (-not $NoBrowser) {
-  Start-Sleep -Seconds 3
-  Start-Process "http://localhost:$Port/"
+  $url = "http://localhost:$Port/"
+  Start-Job -ScriptBlock { param($u) Start-Sleep -Seconds 3; Start-Process $u } -ArgumentList $url | Out-Null
 }
 
+Push-Location $src
 try {
-  $proc.WaitForExit()
-} finally {
-  if (-not $proc.HasExited) { $proc.Kill() }
+  & $py @argList
+}
+finally {
+  Pop-Location
 }

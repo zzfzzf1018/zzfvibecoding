@@ -32,23 +32,52 @@ python -m uvicorn main:app --reload
 > 首次访问会建表（SQLite `etf.db`）；数据需先运行 `refresh_*` 或访问接口触发自采。
 
 ## 一键运行（推荐）
-无需手动装依赖，脚本自动装运行时依赖并启动：
+无需手动装依赖，脚本自动装运行时依赖并启动。下面给出**三种方式**，任选其一。
 
-```bash
-# 跨平台（Python 启动器）
-python run.py                 # 装依赖 + 启动 + 自动打开浏览器
-python run.py --seed          # 启动前先播种 ETF 列表（让名称搜索可用，需联网）
-python run.py --port 8080 --no-browser
-python run.py --dev            # 热重载
+### 方式一：Windows 双击（最简单）
+直接双击项目根目录的 **`run.bat`** 即可。它会：
+- 自动绕过 PowerShell 执行策略限制（避免"双击没反应"）；
+- 在**同一个窗口**显示启动日志（窗口不会神秘消失）；
+- 启动成功后**自动打开浏览器**到 `http://localhost:8000/`。
+> 关闭那个黑色窗口 = 停止服务。
 
-# Windows / PowerShell
-.\scripts\run.ps1              # 同上，自动选用 CodeBuddy 内置 Python
-.\scripts\run.ps1 -Seed        # 启动前播种 ETF 列表
+### 方式二：PowerShell 命令行（可加 -Seed 等参数）
+```powershell
+# 在项目根目录执行
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1            # 默认端口 8000，自动开浏览器
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 -Seed      # 启动前播种 ETF 列表（让名称搜索可用，需联网）
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 -Port 8080 -NoBrowser -Dev
 ```
+参数：`-Seed`(播种列表) / `-Port <端口>` / `-NoBrowser`(不开浏览器) / `-Dev`(热重载) / `-Python <python路径>`。
 
-`run.py` / `run.ps1` 会：① 解析 Python（默认 CodeBuddy 内置，可用 `-Python` 或 `ETF_PYTHON` 覆盖）；
+### 方式三：跨平台 Python 启动器（macOS / Linux，或 Windows 终端）
+```bash
+python run.py                 # 装依赖 + 启动 + 自动打开浏览器
+python run.py --seed          # 启动前播种 ETF 列表（让名称搜索可用，需联网）
+python run.py --port 8080 --no-browser
+python run.py --dev           # 热重载
+```
+> 注意：Windows 上若 `python` 指向 Microsoft Store 占位程序，请改用 `run.bat`，或用真实 Python：
+> `C:\Users\zzf\.workbuddy\binaries\python\versions\3.14.3\python.exe run.py`
+
+### 启动后如何打开网页查看
+1. 脚本启动成功会**自动打开浏览器**；若没自动打开，请手动访问：
+   - **Web 页面（查询界面）**：`http://localhost:8000/`
+   - **接口文档（Swagger）**：`http://localhost:8000/docs`
+2. 在页面输入 ETF 代码（如 `510300`、`159915`）即可查看基本信息 / 估值 / 历史分位 / 成分股。
+3. 若页面搜索"名称"无结果、或想直接用代码搜索：首次启动加 `-Seed`/`--seed`（联网拉全量 ETF 列表，可能耗时/被限频），之后按代码搜索始终可用。
+
+### 没反应 / 排错
+- **双击 `.ps1` 没反应**：是 Windows 默认禁止运行脚本所致 —— 改用双击 **`run.bat`** 或在 PowerShell 里加 `-ExecutionPolicy Bypass` 运行（见方式二）。
+- **双击 `run.py` 一闪而过**：多为 Python 未关联或 `pip` 安装失败。请用上面的命令行方式，或在 `run.py` 末尾查看错误信息（已加保护，双击报错会停在"按 Enter 退出"）。
+- **浏览器没自动打开**：手动访问 `http://localhost:8000/`；或加 `-NoBrowser` 后用该地址。
+- **端口被占用**：换端口，如 `-Port 8080` 或 `python run.py --port 8080`。
+- **本机无外网**：akshare 取数会失败并降级到 404/兜底源，页面与接口仍可正常打开、不崩溃；联网后即有真实数据。
+
+### 脚本内部做了什么
+`run.py` / `run.ps1` / `run.bat` 会：① 解析 Python（默认 CodeBuddy 内置，可用 `-Python` 或 `ETF_PYTHON` 覆盖）；
 ② `pip` 安装运行时依赖（`requirements-runtime.txt`，akshare 安装失败则降级到中证/东财兜底源）；
-③ 可选 `--seed` 调用 `refresh_etf_basic` 播种基础列表；④ 启动 `uvicorn main:app` 并打开浏览器。
+③ 可选 `--seed`/`-Seed` 调用 `refresh_etf_basic` 播种基础列表；④ 在 `src/` 下启动 `uvicorn main:app`（前台运行，日志可见）。
 运行入口在 `src/` 目录（`from app...` 导入要求），故脚本内部已 `cd src` 并使用 `main:app` 模块路径。
 
 ## 数据源与多源降级

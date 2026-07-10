@@ -80,4 +80,17 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:  # 双击运行时避免窗口一闪而过
+        import traceback
+
+        print(f"[错误] 启动失败: {e}", file=sys.stderr)
+        traceback.print_exc()
+        if sys.platform == "win32":
+            try:
+                input("按 Enter 退出...")
+            except Exception:
+                pass
