@@ -28,6 +28,12 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path   # scripts/
 $root = Split-Path -Parent $root                          # project root
 $src  = Join-Path $root 'src'
 
+# IMPORTANT: the DB path is relative to cwd (sqlite:///./etf.db). Both the -Seed
+# step and the uvicorn server MUST share the same cwd, otherwise the seed writes
+# to one etf.db while the server reads a different (empty) one -> search returns
+# nothing. So switch cwd to src/ for the rest of the script.
+Push-Location $src
+
 # 1) Resolve Python
 if ($Python) {
   $py = $Python
@@ -81,7 +87,6 @@ if (-not $NoBrowser) {
   Start-Job -ScriptBlock { param($u) Start-Sleep -Seconds 3; Start-Process $u } -ArgumentList $url | Out-Null
 }
 
-Push-Location $src
 try {
   & $py @argList
 }
