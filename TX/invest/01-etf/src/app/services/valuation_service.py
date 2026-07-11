@@ -36,7 +36,7 @@ class ValuationService:
         etf = resolve_etf(self._etf_repo, self._basic_sources, code)
         if etf.type in _APPLICABLE_FALSE_TYPES:
             return ValuationView(applicable=False, reason=f"{etf.type}类 ETF 无指数估值")
-        idx = etf.track_index_code
+        idx = etf.track_index_code or etf.track_index
         if not idx:
             return ValuationView(applicable=False, reason="未配置跟踪指数")
 
@@ -47,7 +47,7 @@ class ValuationService:
         last_exc: Exception | None = None
         for src in self._sources:
             try:
-                v = src.get_latest(idx)
+                v = src.get_latest(idx, etf.track_index)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("估值源 %s 获取 %s 失败: %s", src.name, idx, exc)
                 last_exc = exc

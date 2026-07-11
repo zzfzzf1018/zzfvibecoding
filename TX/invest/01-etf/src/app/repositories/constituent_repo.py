@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.orm import Exchange, IndexConstituent as IndexConstituentORM

@@ -58,10 +58,16 @@ class Container:
             self.etf_repo, self.valuation_repo, self.valuation_sources, self.basic_sources
         )
         self.percentile_service = PercentileService(
-            self.etf_repo, self.valuation_repo, self.basic_sources
+            self.etf_repo,
+            self.valuation_repo,
+            self.basic_sources,
+            self.valuation_sources,
         )
         self.constituent_service = ConstituentService(
-            self.etf_repo, self.constituent_repo, self.basic_sources
+            self.etf_repo,
+            self.constituent_repo,
+            self.basic_sources,
+            self.constituent_sources,
         )
 
 

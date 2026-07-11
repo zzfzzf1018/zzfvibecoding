@@ -9,7 +9,8 @@ from datetime import date, timedelta
 
 from app.core.config import settings
 from app.core.errors import SourceUnavailable
-from app.datasource.interfaces import EtfBasicSource
+from app.core.logging import logger
+from app.datasource.interfaces import EtfBasicSource, ValuationSource
 from app.models.schemas import (
     MonthlyPercentilePoint,
     MonthlyPercentileView,
@@ -69,11 +70,32 @@ class PercentileService:
         etf_repo: EtfRepo,
         valuation_repo: ValuationRepo,
         basic_sources: list[EtfBasicSource] | None = None,
+        valuation_sources: list[ValuationSource] | None = None,
     ) -> None:
         self._etf_repo = etf_repo
         self._valuation_repo = valuation_repo
         self._basic_sources = basic_sources or []
+        self._valuation_sources = valuation_sources or []
         self._min_samples = settings.min_samples
+
+    def _ensure_history(self, idx: str, index_name: str | None, window_years: int) -> None:
+        """历史不足时按需从 valuation_sources 拉取全量并落库（保证分位实际出数）。"""
+        existing = self._valuation_repo.get_history(idx)
+        # 已积累足够覆盖窗口（约 window_years*240 个交易日）则跳过，避免重复拉取
+        if len(existing) >= window_years * 200:
+            return
+        end = date.today()
+        start = end - timedelta(days=window_years * 400)
+        for src in self._valuation_sources:
+            try:
+                pts = src.get_history(idx, start=start, end=end, index_name=index_name)
+            except Exception as exc:  # noqa: BLE001
+                continue
+            if pts:
+                for p in pts:
+                    self._valuation_repo.append_history(idx, p)
+                logger.info("历史分位：自 %s 补充 %s 条估值历史", src.name, len(pts))
+                break
 
     def get_percentile(self, code: str, window: str = "5y") -> PercentileView:
         """FR-04: 计算 PE/PB 在指定窗口的历史分位；样本不足自动降级并标记。"""
@@ -131,15 +153,18 @@ class PercentileService:
         `window_years` 年则用现有全部历史兜底并置 `degraded=True`；该月无数据则分位为 None。
         """
         etf = resolve_etf(self._etf_repo, self._basic_sources, code)
-        idx = etf.track_index_code
+        idx = etf.track_index_code or etf.track_index
         if not idx:
             return MonthlyPercentileView(
                 window_years=window_years, months=months, sample_count=0, series=[]
             )
 
+        # 历史不足时按需拉取并落库（保证分位实际出数；可选主流宽基指数之外优雅降级）
+        self._ensure_history(idx, etf.track_index, window_years)
+
         hist = sorted(self._valuation_repo.get_history(idx), key=lambda h: h.date)
         if not hist:
-            # 无历史属正常业务（尚未采集），返回空序列由前端提示，而非抛错
+            # 无历史属正常业务（指数不支持历史源/尚未采集），返回空序列由前端提示，而非抛错
             return MonthlyPercentileView(
                 window_years=window_years, months=months, sample_count=0, series=[]
             )

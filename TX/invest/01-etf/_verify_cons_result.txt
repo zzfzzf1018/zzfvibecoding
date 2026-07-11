@@ -1,0 +1,6 @@
+CONS_COUNT 300
+{"stock_code": "300308", "stock_name": "中际旭创", "sw_l1": null, "weight": 5.008, "exchange": "深圳证券交易所"}
+{"stock_code": "300750", "stock_name": "宁德时代", "sw_l1": null, "weight": 3.675, "exchange": "深圳证券交易所"}
+{"stock_code": "300502", "stock_name": "新易盛", "sw_l1": null, "weight": 2.992, "exchange": "深圳证券交易所"}
+{"stock_code": "600519", "stock_name": "贵州茅台", "sw_l1": null, "weight": 2.62, "exchange": "上海证券交易所"}
+{"stock_code": "603986", "stock_name": "兆易创新", "sw_l1": null, "weight": 1.925, "exchange": "上海证券交易所"}

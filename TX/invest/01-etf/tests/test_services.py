@@ -102,14 +102,14 @@ def test_percentile_degrade_on_small_sample():
 class _FailingSource:
     name = "fail"
 
-    def get_latest(self, idx):
+    def get_latest(self, idx, index_name=None):
         raise RuntimeError("boom")
 
 
 class _GoodSource:
     name = "good"
 
-    def get_latest(self, idx):
+    def get_latest(self, idx, index_name=None):
         return IndexValuation(index_code=idx, pe_ttm=12.0, pb=1.2, source="good")
 
 

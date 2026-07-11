@@ -70,7 +70,9 @@ class CsIndexValuationSource:
     def __init__(self, client: HttpClient | None = None) -> None:
         self._client = client or HttpClient()
 
-    def get_latest(self, index_code: str) -> IndexValuation | None:
+    def get_latest(
+        self, index_code: str, index_name: str | None = None
+    ) -> IndexValuation | None:
         """FR-03：取指数最新估值（PE/PB/股息率）。失败返回 None。"""
         try:
             data = self._client.post_json(
@@ -95,7 +97,11 @@ class CsIndexValuationSource:
         )
 
     def get_history(
-        self, index_code: str, start: date, end: date
+        self,
+        index_code: str,
+        start: date,
+        end: date,
+        index_name: str | None = None,
     ) -> list[IndexValuationPoint]:
         """FR-06：中证估值接口支持按日期区间返回历史序列（bonus：补充历史分位数据）。"""
         if not start or not end:

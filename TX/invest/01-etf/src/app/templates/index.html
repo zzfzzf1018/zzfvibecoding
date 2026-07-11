@@ -92,15 +92,23 @@ async function load(code){
 
 const esc = (s) => (s == null ? '' : String(s));
 const pctClass = (p) => (p == null ? '' : (p <= 30 ? 'pe-low' : (p >= 70 ? 'pe-high' : '')));
+const fmtScale = (v) => {  // 元 -> 亿元/万元
+  if (v == null) return null;
+  if (Math.abs(v) >= 1e8) return (v / 1e8).toFixed(2) + ' 亿元';
+  if (Math.abs(v) >= 1e4) return (v / 1e4).toFixed(2) + ' 万元';
+  return esc(v) + ' 元';
+};
+const fmtPct = (v) => (v == null ? null : esc(v) + '%');
 
 function render(basic, val, perc, cons, ind){
   let h = `<div class="section"><h3>基本信息</h3><div class="kv">`;
   const rows = [
     ['代码', basic.code], ['名称', basic.name], ['类型', basic.type],
     ['跟踪指数', basic.track_index], ['跟踪指数代码', basic.track_index_code],
-    ['基金公司', basic.fund_manager], ['基金经理', basic.manager],
-    ['规模(元)', basic.fund_scale], ['管理费(%)', basic.management_fee_rate],
-    ['托管费(%)', basic.custody_fee_rate], ['跟踪误差', basic.tracking_error],
+    ['发行商', basic.fund_manager], ['托管人', basic.custodian],
+    ['基金经理', basic.manager],
+    ['规模', fmtScale(basic.fund_scale)], ['管理费', fmtPct(basic.management_fee_rate)],
+    ['托管费', fmtPct(basic.custody_fee_rate)], ['跟踪误差', basic.tracking_error],
     ['成立日', basic.establish_date],
   ];
   rows.forEach(r => { if(r[1] != null) h += `<div class="k">${r[0]}</div><div>${esc(r[1])}</div>`; });

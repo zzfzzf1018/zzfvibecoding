@@ -30,10 +30,16 @@ class EtfBasicSource(Protocol):
 class ValuationSource(Protocol):
     name: str
 
-    def get_latest(self, index_code: str) -> IndexValuation | None: ...
+    def get_latest(
+        self, index_code: str, index_name: str | None = None
+    ) -> IndexValuation | None: ...
 
     def get_history(
-        self, index_code: str, start: date, end: date
+        self,
+        index_code: str,
+        start: date,
+        end: date,
+        index_name: str | None = None,
     ) -> list[IndexValuationPoint]: ...
 
 
