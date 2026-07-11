@@ -1,0 +1,34 @@
+# Python 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Streamlit
+.streamlit/secrets*.toml
+
+# 日志
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 其他
+*.tmp
+*.bak
