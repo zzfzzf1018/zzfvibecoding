@@ -82,7 +82,7 @@ async function load(code){
     const [basic, val, perc, cons, ind] = await Promise.all([
       api(`/api/etf/${code}/basic`),
       api(`/api/etf/${code}/valuation`).catch(() => ({applicable:false})),
-      api(`/api/etf/${code}/percentile?window=5y`).catch(() => null),
+      api(`/api/etf/${code}/percentile?months=12&window_years=5`).catch(() => null),
       api(`/api/etf/${code}/constituents?top_n=20`).catch(() => []),
       api(`/api/etf/${code}/constituents/industry`).catch(() => []),
     ]);
@@ -120,15 +120,15 @@ function render(basic, val, perc, cons, ind){
   }
   h += `</div>`;
 
-  h += `<div class="section"><h3>历史分位（${perc ? perc.window : '-'}${perc && perc.degraded ? ' · 样本不足已降级' : ''}）</h3>`;
-  if(perc && perc.sample_count){
-    h += `<div class="kv">
-      <div class="k">样本数</div><div>${perc.sample_count}</div>
-      <div class="k">PE 分位</div><div class="${pctClass(perc.pe_percentile)}">${esc(perc.pe_percentile)}%</div>
-      <div class="k">PB 分位</div><div class="${pctClass(perc.pb_percentile)}">${esc(perc.pb_percentile)}%</div>
-      <div class="k">PE 区间</div><div>${esc(perc.pe_min)} ~ ${esc(perc.pe_max)}（中位 ${esc(perc.pe_median)}）</div>
-      <div class="k">PB 区间</div><div>${esc(perc.pb_min)} ~ ${esc(perc.pb_max)}（中位 ${esc(perc.pb_median)}）</div>
-    </div>`;
+  const wy = perc ? perc.window_years : 5;
+  h += `<div class="section"><h3>历史分位 · 近 ${perc ? perc.months : 12} 个月（滚动 ${wy} 年${perc && perc.degraded ? ' · 数据不足' + wy + '年，基准已压缩' : ''}）</h3>`;
+  const pcell = v => `<td class="${pctClass(v)}">${v == null ? '—' : esc(v) + '%'}</td>`;
+  if(perc && perc.series && perc.series.length){
+    h += `<table><thead><tr><th>月份</th><th>PE</th><th>PE 分位</th><th>PB</th><th>PB 分位</th></tr></thead><tbody>`;
+    perc.series.forEach(m => {
+      h += `<tr><td>${esc(m.month)}</td><td>${m.pe == null ? '—' : esc(m.pe)}</td>${pcell(m.pe_percentile)}<td>${m.pb == null ? '—' : esc(m.pb)}</td>${pcell(m.pb_percentile)}</tr>`;
+    });
+    h += `</tbody></table><div class="muted">分位越低代表相对越便宜；"—" 表示当月无数据。</div>`;
   } else {
     h += `<div class="muted">暂无历史分位数据（需先采集历史估值）</div>`;
   }

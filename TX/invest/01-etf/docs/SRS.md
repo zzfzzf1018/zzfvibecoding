@@ -96,16 +96,18 @@
   - 债券/货币/商品类 ETF 估值不适用 → 返回 `applicable: false` 及原因。
   - 缺失时 `pe_ttm=null`，并标注。
 
-### FR-04 历史分位数
-- **描述**：计算当前 PE/PB 在指定历史区间的分位。
-- **输入**：`code`, `window ∈ {1y,3y,5y,all}`（默认 5y）。
+### FR-04 历史分位数（按月序列）
+- **描述**：返回最近 N 个月、每月 PE/PB 的历史分位序列（默认近 12 个月），用于展示分位随时间的变化趋势。
+- **输入**：`code`, `months`（默认 12，1~36）, `window_years`（默认 5，1~20）。
 - **处理**：
-  1. 取该指数历史 PE/PB 序列。
-  2. 分位 = (当前值 ≤ 历史值的样本数) / 总样本数 × 100%。
-  3. 同时给出 max/min/median。
-- **输出**：`{ pe_percentile, pb_percentile, pe_max, pe_min, pe_median, pb_max, pb_min, pb_median, window, sample_count }`。
+  1. 由 ETF 映射其跟踪指数，取该指数全历史 PE/PB 序列。
+  2. 对最近 `months` 个自然月，逐月取该月**月末**（当月最后一条有效记录）的 PE/PB 值。
+  3. 某月分位 = 月末值在「该月末往前 `window_years` 年」滚动窗口内序列的分位 = (窗口内 ≤ 月末值的样本数)/窗口样本数 × 100%。
+  4. 当月无数据 → 该月分位为 `null`。
+- **输出**：`{ window_years, months, sample_count, degraded, series: [{ month:"YYYY-MM", pe, pe_percentile, pb, pb_percentile }] }`（series 按月份升序）。
 - **业务规则**：
-  - 样本数 < 250 时，`window` 自动降级并提示。
+  - 可用历史不足 `window_years` 年 → 用全部历史兜底并置 `degraded=true`。
+  - 无任何历史 → 返回空 `series`（`sample_count=0`），前端提示"暂无"。
   - 分位保留 1 位小数。
 
 ### FR-05 成分股
@@ -209,7 +211,7 @@ interface EtfBasicSource:
 | GET | `/api/etf/search?keyword=&page=&page_size=` | FR-01 |
 | GET | `/api/etf/{code}/basic` | FR-02 |
 | GET | `/api/etf/{code}/valuation` | FR-03 |
-| GET | `/api/etf/{code}/percentile?window=5y` | FR-04 |
+| GET | `/api/etf/{code}/percentile?months=12&window_years=5` | FR-04（按月序列） |
 | GET | `/api/etf/{code}/constituents?top_n=&industry=` | FR-05 |
 | GET | `/api/etf/{code}/valuation/history?start=&end=` | FR-06 |
 
@@ -274,8 +276,8 @@ etf_basic.code ──(track_index_code)──► index_valuation.index_code
 | AC-02 | 输入"沪深"返回多个模糊匹配项 | FR-01 |
 | AC-03 | `/basic` 返回 DR-01 全部核心字段 | FR-02 |
 | AC-04 | `/valuation` 返回 pe/pb/日期/来源；不适用类有 `applicable:false` | FR-03 |
-| AC-05 | `/percentile?window=5y` 返回分位与 max/min/median | FR-04 |
-| AC-06 | 样本<250 时自动降级并提示 | FR-04/NFR-03 |
+| AC-05 | `/percentile` 返回近 12 个月 `series`，每月含 PE/PB 分位（按月升序） | FR-04 |
+| AC-06 | 历史不足 5 年时 `degraded=true`；当月无数据行分位为 null | FR-04/NFR-03 |
 | AC-07 | `/constituents` 可排序/行业筛选/Top N，可导出 CSV | FR-05 |
 | AC-08 | `/history` 返回按日期升序序列，可 CSV 导出 | FR-06 |
 | AC-09 | 关闭主数据源，系统仍可用（降级） | NFR-02 |

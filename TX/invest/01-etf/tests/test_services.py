@@ -14,7 +14,7 @@ from app.models.schemas import (
     ETFSearchResult,
 )
 from app.services.constituent_service import ConstituentService
-from app.services.percentile_service import PercentileService
+from app.services.percentile_service import PercentileService, _recent_months
 from app.services.search_service import SearchService
 from app.services.valuation_service import ValuationService
 
@@ -127,3 +127,53 @@ def test_valuation_not_applicable_for_bond():
     svc = ValuationService(etf_repo, repo, [_GoodSource()], basic_sources=[])
     view = svc.get_valuation("511260")
     assert view.applicable is False
+
+
+def _monthly_svc(hist):
+    repo = _FakeValRepo(hist=hist)
+    etf_repo = _FakeEtfRepo([EtfBasic(code="510300", name="x", track_index_code="000300")])
+    return PercentileService(etf_repo, repo, basic_sources=[])
+
+
+def test_monthly_percentile_series():
+    """近12个月：每月一条、PE 递减 → 每月分位 = 1/(k+1)。"""
+    months = _recent_months(date.today(), 12)  # 升序
+    hist = [
+        IndexValuationPoint(date=date(y, m, 1), pe_ttm=(12 - k) * 10.0, pb=(12 - k) * 1.0)
+        for k, (y, m) in enumerate(months)
+    ]
+    view = _monthly_svc(hist).get_monthly_percentile("510300", months=12, window_years=5)
+
+    assert len(view.series) == 12
+    # 按月升序，且首尾月份标签正确
+    assert view.series[0].month == f"{months[0][0]:04d}-{months[0][1]:02d}"
+    assert view.series[-1].month == f"{months[-1][0]:04d}-{months[-1][1]:02d}"
+    # 最早月：窗口仅自身 → 100%；最新月：值最小于12个中 → 1/12 → 8.3%
+    assert view.series[0].pe_percentile == 100.0
+    assert view.series[-1].pe_percentile == round(1 / 12 * 100, 1)  # 8.3
+    assert view.series[-1].pe == 10.0
+    # 仅 ~1 年数据 < 5 年 → 降级标记
+    assert view.degraded is True
+    assert view.sample_count == 12
+
+
+def test_monthly_percentile_missing_month_is_null():
+    """中间缺失月份 → 该月 pe/分位为 None，序列仍为 12 个月。"""
+    months = _recent_months(date.today(), 12)
+    hist = [
+        IndexValuationPoint(date=date(y, m, 1), pe_ttm=20.0, pb=2.0)
+        for k, (y, m) in enumerate(months)
+        if k != 5  # 跳过第 6 个月
+    ]
+    view = _monthly_svc(hist).get_monthly_percentile("510300", months=12, window_years=5)
+
+    assert len(view.series) == 12
+    assert view.series[5].pe is None
+    assert view.series[5].pe_percentile is None
+    assert view.series[5].pb_percentile is None
+
+
+def test_monthly_percentile_no_history_returns_empty():
+    view = _monthly_svc([]).get_monthly_percentile("510300")
+    assert view.sample_count == 0
+    assert view.series == []

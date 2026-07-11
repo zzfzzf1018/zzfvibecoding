@@ -78,6 +78,26 @@ class PercentileView(BaseModel):
     degraded: bool = False
 
 
+class MonthlyPercentilePoint(BaseModel):
+    """某一月份的月末估值及其历史分位（FR-04 按月序列）。"""
+
+    month: str  # "YYYY-MM"
+    pe: Optional[float] = None
+    pe_percentile: Optional[float] = None
+    pb: Optional[float] = None
+    pb_percentile: Optional[float] = None
+
+
+class MonthlyPercentileView(BaseModel):
+    """最近 N 个月的 PE/PB 历史分位序列（默认近 12 个月，滚动 5 年窗口）。"""
+
+    window_years: int = 5
+    months: int = 12
+    sample_count: int = 0
+    degraded: bool = False  # 可用历史不足 window_years，基准窗口被压缩
+    series: list[MonthlyPercentilePoint] = []
+
+
 class ETFSearchResult(BaseModel):
     code: str
     name: Optional[str] = None

@@ -17,7 +17,7 @@ from app.models.schemas import (
     ConstituentStock,
     IndexValuationPoint,
     IndustryWeight,
-    PercentileView,
+    MonthlyPercentileView,
     ValuationView,
 )
 
@@ -33,11 +33,16 @@ def valuation(code: str) -> ValuationView:
         raise HTTPException(status_code=501, detail="功能未实现")
 
 
-@router.get("/{code}/percentile", response_model=PercentileView)
-def percentile(code: str, window: str = Query("5y")) -> PercentileView:
+@router.get("/{code}/percentile", response_model=MonthlyPercentileView)
+def percentile(
+    code: str,
+    months: int = Query(12, ge=1, le=36),
+    window_years: int = Query(5, ge=1, le=20),
+) -> MonthlyPercentileView:
+    """FR-04：返回最近 `months` 个月、每月 PE/PB 的历史分位（滚动 `window_years` 年）。"""
     svc = get_percentile_service()
     try:
-        return svc.get_percentile(code, window)
+        return svc.get_monthly_percentile(code, months=months, window_years=window_years)
     except NotImplementedError:
         raise HTTPException(status_code=501, detail="功能未实现")
     except ValueError as exc:
