@@ -199,7 +199,7 @@ class AkShareEtfBasicSource:
     name = "akshare"
 
     def list_etfs(self) -> list[EtfBasic]:
-        df = run_df("fund_etf_category_sina", [{"symbol": "ETF基金"}])
+        df = run_df("fund_etf_category_sina", [], {"symbol": "ETF基金"})
         code_col = _pick(df.columns, ["代码", "code"])
         name_col = _pick(df.columns, ["名称", "name"])
         out: list[EtfBasic] = []
