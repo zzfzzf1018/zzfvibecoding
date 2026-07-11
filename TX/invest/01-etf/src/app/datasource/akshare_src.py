@@ -34,6 +34,8 @@ _COMMON_INDEX_MAP = {
     "5G通信": "931079", "中证基建": "399995", "中证证保": "399986",
     "中证传媒": "399971", "央视50": "399550", "基本面50": "000925",
     "中证100": "000903", "沪深300价值": "000919", "中证红利低波": "930955",
+    # 主题/行业指数（lg 估值不支持，但成分股/估值兜底需要代码）
+    "中证绿色电力指数": "931897", "绿色电力": "931897",
 }
 
 # 运行时从 eastmoney 拉取的全量 名->码 映射（进程内缓存，拉取失败则为空）。
@@ -156,6 +158,41 @@ def _norm_index_name(name: str | None) -> str | None:
     return n.strip() or None
 
 
+def _strip_rate_suffix(name: str | None) -> str | None:
+    """剥离业绩比较基准里多余的『收益率/全收益』后缀。
+
+    天天基金档案中跟踪指数常写在『业绩比较基准』列，值形如
+    '中证绿色电力指数收益率'（这是基准收益口径，真正的指数名是
+    '中证绿色电力指数'）。若不剥离，后续名->码解析与 lg 估值都会用错名字。
+    """
+    if not name:
+        return None
+    n = str(name).strip()
+    for suffix in ("全收益指数", "全收益", "收益率"):
+        if n.endswith(suffix):
+            n = n[: -len(suffix)]
+    return n.strip() or None
+
+
+# stock_index_pe_lg / stock_index_pb_lg（乐咕乐股）仅支持以下 12 个主流宽基指数，
+# 其余指数调用必抛 KeyError。集中维护，避免对不支持的指数无谓重试刷屏。
+_LG_SUPPORTED = {
+    "上证50", "沪深300", "上证380", "创业板50", "中证500", "上证180",
+    "深证红利", "深证100", "中证1000", "上证红利", "中证100", "中证800",
+}
+
+
+def _is_index_code(s: str | None) -> bool:
+    """判断是否为指数代码（6 位数字，可选 .SH/.SZ/.CSI 后缀）。
+
+    index_stock_cons_csindex / stock_zh_index_value_csindex 等接口需要代码而非中文名，
+    传入中文名会触发 UnicodeEncodeError / Excel 解析失败，故调用前先校验。
+    """
+    if not s:
+        return False
+    return bool(re.fullmatch(r"\d{6}(?:\.\w+)?", str(s).strip()))
+
+
 def _runtime_index_code_map() -> dict[str, str]:
     """尽力从 eastmoney 拉全量 名->码 映射（进程内缓存；失败返回空）。"""
     global _INDEX_CODE_MAP_CACHE
@@ -228,6 +265,9 @@ class AkShareEtfBasicSource:
         track_name = _pick_val(
             info, ["业绩比较基准", "投资标的", "跟踪指数", "标的指数", "跟踪标的"]
         )
+        # 业绩比较基准列常为『xxx指数收益率』，剥离收益口径后缀得真正指数名。
+        if track_name:
+            track_name = _strip_rate_suffix(track_name)
         if not track_name:  # 兜底：扫描任意含「指数」的值
             for v in info.values():
                 if isinstance(v, str) and "指数" in v:
@@ -284,8 +324,10 @@ class AkShareValuationSource:
 
         # 1) 主源：乐咕乐股（静态口径，与历史分位同源）
         # 每次调用经 _runner 在独立子进程执行，规避同进程多次调用相互污染。
+        # 仅对 lg 支持的 12 个主流宽基发起调用，其余指数（如行业/主题）直接跳过，
+        # 避免无谓的 KeyError 重试刷屏。
         lg_pe = lg_pb = lg_date = None
-        if name:
+        if name and name in _LG_SUPPORTED:
             try:
                 df = run_df("stock_index_pe_lg", [name])
                 if df is not None and len(df):
@@ -303,8 +345,9 @@ class AkShareValuationSource:
 
         # 2) 兜底：仅当乐咕乐股不可用（无指数名 / 非主流宽基）时，才用中证按代码取
         #    PE + 股息率（中证无市净率列）。lg 成功时不再调用中证，避免额外限流。
+        #    中证接口必须传代码，传入中文名会触发 UnicodeEncodeError，故先校验。
         cs_pe = cs_dy = cs_date = None
-        if (lg_pe is None and lg_pb is None) and index_code:
+        if (lg_pe is None and lg_pb is None) and _is_index_code(index_code):
             try:
                 df = run_df("stock_zh_index_value_csindex", [index_code])
                 if df is not None and len(df):
@@ -344,7 +387,9 @@ class AkShareValuationSource:
         其余指数返回空（由上层优雅降级）。
         """
         name = _norm_index_name(index_name)
-        if not name:
+        # 历史 PE/PB 仅 lg 提供，且只覆盖 12 个主流宽基；其余指数直接返回空，
+        # 避免对不支持的指数发起 lg 调用刷 KeyError。
+        if not (name and name in _LG_SUPPORTED):
             return []
         try:
             df_pe = run_df("stock_index_pe_lg", [name])
@@ -393,6 +438,10 @@ class AkShareConstituentSource:
     name = "akshare"
 
     def get_constituents(self, index_code: str) -> list[ConstituentStock]:
+        # index_stock_cons_csindex 需传指数代码；上层在 code 缺失时会回退中文名，
+        # 直接调用会触发 'Excel file format cannot be determined'。无有效代码时返回空。
+        if not _is_index_code(index_code):
+            return []
         try:
             df = run_df("index_stock_cons_csindex", [index_code])
         except Exception as exc:  # noqa: BLE001

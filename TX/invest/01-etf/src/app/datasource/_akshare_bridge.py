@@ -23,6 +23,16 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
+# 部分环境配置了不可达的 HTTP(S) 代理（如本机 dead proxy），会导致 eastmoney 等域名
+# 请求报 ProxyError（"Unable to connect to proxy"）。由于该代理本身不可达，清除后改为
+# 直连反而可用；对已在 NO_PROXY 中的 sina / lg / csindex 等源无影响。这从根因上修复
+# `index_code_id_map_em` 等依赖 eastmoney 的「名->码」映射拉取失败问题。
+import os
+
+for _p in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+          "ALL_PROXY", "all_proxy", "no_proxy", "NO_PROXY"):
+    os.environ.pop(_p, None)
+
 
 def _main() -> None:
     req = json.loads(sys.argv[1])
