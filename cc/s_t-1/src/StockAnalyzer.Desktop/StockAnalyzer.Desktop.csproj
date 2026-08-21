@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>StockAnalyzer.Desktop</RootNamespace>
+    <AssemblyName>StockAnalyzer.Desktop</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="ScottPlot.WPF" Version="5.0.55" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockAnalyzer.Core\StockAnalyzer.Core.csproj" />
+    <ProjectReference Include="..\StockAnalyzer.Data\StockAnalyzer.Data.csproj" />
+    <ProjectReference Include="..\StockAnalyzer.DataSource\StockAnalyzer.DataSource.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

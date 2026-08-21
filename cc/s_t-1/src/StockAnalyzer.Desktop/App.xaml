@@ -1,0 +1,18 @@
+<Application x:Class="StockAnalyzer.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:StockAnalyzer.Desktop.Infrastructure">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Theme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <infra:ChangeToBrushConverter x:Key="ChangeToBrush" />
+      <infra:PercentileToBrushConverter x:Key="PercentileToBrush" />
+      <infra:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+      <infra:CountToVisibilityConverter x:Key="CountToVisibility" />
+      <infra:MarketNameConverter x:Key="MarketNameConverter" />
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

@@ -1,0 +1,142 @@
+## ---------------------------------------------------------------
+## .NET / Visual Studio / Rider / VS Code
+## ---------------------------------------------------------------
+
+# 编译产物
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+BenchmarkDotNet.Artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+*.userprefs
+*.VisualState.xml
+*.psess
+*.vsp
+*.vspx
+*.sap
+*.svclog
+*.rsuser
+*.dbmdl
+*.jfm
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# VS Code（保留共享配置，忽略个人配置）
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# 测试与覆盖率
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+TestResults/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+
+# MSBuild / 中间文件
+*.tlog
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# ClickOnce / 发布
+*.publishsettings
+*.azurePubxml
+*.pubxml
+*.pubxml.user
+PublishScripts/
+
+## ---------------------------------------------------------------
+## 本项目专属
+## ---------------------------------------------------------------
+
+# 本地 SQLite 数据库与缓存（数据可重新抓取，不入库）
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+cache/
+AppData/
+
+# 本地用户配置（含可能的私有 Token）
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+*.secrets.json
+
+# 本地导出
+export/
+*.csv.local
+
+## ---------------------------------------------------------------
+## 操作系统
+## ---------------------------------------------------------------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.AppleDouble
+.LSOverride
