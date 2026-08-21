@@ -1,0 +1,195 @@
+<UserControl x:Class="ValuationTools.Desktop.Views.ToolView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:ValuationTools.Desktop.Models"
+             xmlns:infra="clr-namespace:ValuationTools.Desktop.Infrastructure"
+             xmlns:vm="clr-namespace:ValuationTools.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:ToolViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="{StaticResource PageBackgroundBrush}">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <infra:EmptyStringToVisibilityConverter x:Key="TextToVis" />
+
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <Style x:Key="HintStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+        </Style>
+
+        <DataTemplate DataType="{x:Type models:NumberField}">
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}" />
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Unit}" MinWidth="34"
+                               Margin="6,0,0,0" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Visibility="{Binding HasUnit, Converter={StaticResource BoolToVis}}" />
+                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" />
+                </DockPanel>
+                <TextBlock Text="{Binding Hint}" Style="{StaticResource HintStyle}"
+                           Visibility="{Binding Hint, Converter={StaticResource TextToVis}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type models:ChoiceField}">
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}" />
+                <ComboBox ItemsSource="{Binding Options}" SelectedIndex="{Binding SelectedIndex}" />
+                <TextBlock Text="{Binding Hint}" Style="{StaticResource HintStyle}"
+                           Visibility="{Binding Hint, Converter={StaticResource TextToVis}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type models:ToggleField}">
+            <StackPanel Margin="0,0,0,12">
+                <CheckBox Content="{Binding Label}" IsChecked="{Binding Value}"
+                          Foreground="{StaticResource TextPrimaryBrush}" />
+                <TextBlock Text="{Binding Hint}" Style="{StaticResource HintStyle}" Margin="20,3,0,0"
+                           Visibility="{Binding Hint, Converter={StaticResource TextToVis}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ResultItemTemplate" DataType="{x:Type models:ResultItem}">
+            <Border Padding="0,6" BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="{Binding Note}" Style="{StaticResource HintStyle}"
+                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                    <TextBlock x:Name="ValueText" Grid.Column="1" Text="{Binding Value}"
+                               VerticalAlignment="Center" Margin="12,0,0,0"
+                               FontWeight="SemiBold" TextAlignment="Right"
+                               Foreground="{StaticResource TextPrimaryBrush}" />
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsPrimary}" Value="True">
+                    <Setter TargetName="ValueText" Property="FontSize" Value="22" />
+                    <Setter TargetName="ValueText" Property="FontWeight" Value="Bold" />
+                    <Setter TargetName="ValueText" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="20,16,20,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 标题与操作 -->
+        <Border Style="{StaticResource CardStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <Border Background="{StaticResource AccentLightBrush}" CornerRadius="4"
+                            Padding="10,6" Margin="0,10,0,0" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Formula}" TextWrapping="Wrap"
+                                   FontFamily="Consolas, Microsoft YaHei UI"
+                                   Foreground="{StaticResource AccentBrush}" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="恢复默认" Command="{Binding ResetCommand}" Style="{StaticResource ActionButtonStyle}" />
+                    <Button Content="复制报告" Command="{Binding CopyCommand}" Style="{StaticResource ActionButtonStyle}" />
+                    <Button Content="导出报告" Command="{Binding ExportCommand}" Style="{StaticResource ActionButtonStyle}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="380" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 输入区 -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource SectionTitleStyle}" />
+                                    <ItemsControl ItemsSource="{Binding Fields}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- 结果区 -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Padding="12,10" CornerRadius="6" Margin="0,0,0,12"
+                            Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsError}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource WarningBrush}" />
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="计算结果" Style="{StaticResource SectionTitleStyle}" />
+                            <ItemsControl ItemsSource="{Binding Results}" ItemTemplate="{StaticResource ResultItemTemplate}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}"
+                            Visibility="{Binding HasSchedule, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding ScheduleTitle}" Style="{StaticResource SectionTitleStyle}" />
+                            <DataGrid ItemsSource="{Binding Schedule}" Style="{StaticResource GridStyle}"
+                                      AutoGeneratingColumn="OnAutoGeneratingColumn" MaxHeight="380" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}"
+                            Visibility="{Binding HasSensitivity, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SensitivityTitle}" Style="{StaticResource SectionTitleStyle}" />
+                            <DataGrid ItemsSource="{Binding Sensitivity}" Style="{StaticResource GridStyle}"
+                                      AutoGeneratingColumn="OnAutoGeneratingColumn" MaxHeight="320" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

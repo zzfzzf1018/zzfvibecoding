@@ -1,0 +1,72 @@
+## ---------------------------------------------
+## .NET 构建产物
+## ---------------------------------------------
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+*.dll
+*.exe
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+
+## ---------------------------------------------
+## Visual Studio / Rider / VS Code
+## ---------------------------------------------
+.vs/
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.iml
+*.csproj.user
+
+## ---------------------------------------------
+## 测试与代码覆盖率
+## ---------------------------------------------
+[Tt]est[Rr]esult*/
+TestResults/
+*.trx
+*.coverage
+*.coverlet.json
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## ---------------------------------------------
+## NuGet
+## ---------------------------------------------
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+.nuget/
+project.lock.json
+project.fragment.lock.json
+
+## ---------------------------------------------
+## 本项目相关
+## ---------------------------------------------
+# 应用导出的估值报告
+*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9].txt
+# 调试期的临时测试日志
+testlog.txt
+
+## ---------------------------------------------
+## 操作系统与临时文件
+## ---------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+*.tmp
+*.bak
+*~
